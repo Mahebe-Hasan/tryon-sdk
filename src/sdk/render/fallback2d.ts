@@ -12,6 +12,7 @@ const COMPOSITE: Record<BlendMode, GlobalCompositeOperation> = {
   color: 'color',
   // Closest 2D equivalent: product hue/saturation with the region's own light and shadow.
   pigment: 'color',
+  layer: 'multiply',
 };
 
 /**

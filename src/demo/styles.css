@@ -276,6 +276,33 @@ h1 {
   color: var(--muted);
 }
 
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--muted);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.chip-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
 .renderer {
   margin: 8px 0 0;
   font-size: 0.8125rem;

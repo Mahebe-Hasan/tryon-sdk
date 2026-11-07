@@ -1,6 +1,7 @@
 import type { RegionShape } from '../tracking/regions';
 import type { BlendMode, RGB } from './color';
 import type { PigmentParams } from './recipes';
+import type { LayerParams } from './faceRecipes';
 
 /** Finishes the face renderer understands (nail finishes come in Phase 6). */
 export const FINISHES = ['matte', 'satin', 'cream', 'gloss', 'shimmer', 'metallic'] as const;
@@ -43,6 +44,7 @@ export const RENDER_CONFIG = {
     'soft-light': 0.3,
     color: 0,
     pigment: 0, // pigment effects carry their own lightAdapt (PigmentParams)
+    layer: 0, // layer effects are lit by the scene illuminant
   } satisfies Record<BlendMode, number>,
   /** How much skin/lip texture (local contrast) to put back on top, per blend mode. */
   detailByMode: {
@@ -53,6 +55,7 @@ export const RENDER_CONFIG = {
     'soft-light': 0,
     color: 0,
     pigment: 0, // pigment keeps texture through kL/kC instead
+    layer: 0, // layer multiplies the real pixels, so texture is kept
   } satisfies Record<BlendMode, number>,
   /** Shine estimate: brightness above the local average that counts as specular. */
   specThreshold: 0.015,
@@ -86,8 +89,10 @@ export interface RenderEffect {
    * inside it, so nothing bleeds past the outline (lips). Default 0.
    */
   featherInset?: number;
-  /** Required when blend = 'pigment' (lip products). */
+  /** Required when blend = 'pigment' (lip products, foundation, skin tint, concealer). */
   pigment?: PigmentParams;
+  /** Required when blend = 'layer' (blush, bronzer, contour, highlighter, eyeshadow). */
+  layer?: LayerParams;
   /**
    * Where the synthetic wet highlight sits (frame px): centre, radii along / across the lip
    * axis, and the unit lip axis. Lips only; omitted = no synthetic highlight.

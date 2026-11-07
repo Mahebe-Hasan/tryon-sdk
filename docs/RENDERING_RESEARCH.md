@@ -105,17 +105,62 @@ Coverage, kL and kC are our tuned values. They follow the coverage ordering the 
 - Highlight brightness rises in order: matte 136, satin 162, cream 170, gloss 205.
 - Upper/lower lip shading and lip lines are kept. Skin and the inside of the mouth stay untouched.
 
-## Face (Phase 4, planned recipes)
+## Face + eyeshadow (implemented)
 
-| Product           | Method                                                                                                                                                                                                    | Controls (from Perfect Corp's API)        | Notes from sources                                                                                                                                 |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Foundation        | `pigment` on the face skin region. Low kL (≈0.5) evens out tone. kC ≈ 0.3–0.5 by coverage. Mild local smoothing of the high-pass detail. Specular smoothed and damped for matte, raised slightly for dewy | colour, coverage, glow                    | Kubelka-Munk: foundation hides skin colour variation in proportion to coverage. NYCU: fills fine wrinkles and smooths highlights. Must stay subtle |
-| Concealer         | Like foundation, on the under-eye. Lift L* toward the shade, reduce dark-circle chroma                                                                                                                    | colour, coverage, under-eye intensity     |                                                                                                                                                    |
-| Blush             | Thin translucent pigment. Mostly a chroma (a*/b*) shift toward the shade with radial falloff; small L* change; texture fully kept (kL = 1)                                                                | matte / satin (glow) / shimmer, intensity | Kubelka-Munk thin layer; lighting adaptation (Banuba)                                                                                              |
-| Bronzer / contour | Darken L* and warm b* in soft bands. Matte (shine damped)                                                                                                                                                 | intensity, pattern                        | Powder attenuates specular (face chart)                                                                                                            |
-| Highlighter       | Add a light-coloured specular-like glow on the tops of features, plus shimmer particles                                                                                                                   | glow, shimmer intensity / density / size  | Face chart: white specular + noisy normals                                                                                                         |
+The research points to two physical behaviours, so there are two techniques. Every product
+colour is first lit by the measured scene light.
 
-## Eyes and brows (Phase 5, planned recipes)
+**1. Coverage film (`pigment`): foundation, skin tint, concealer.**
+
+- The region's mean CIELAB colour moves `shift` of the way to the shade.
+- Colour blotchiness is reduced (kC < 1).
+- The face's large-scale light and shadow stay (kL = 1), so it doesn't look flat or plastic.
+- Fine lines and pores are softened by `smooth`. Measured foundation fills fine wrinkles and smooths highlights (NYCU).
+- The finish reshapes shine with LipAT's roughness formula. Bare skin is ≈ 0.3; matte damps shine, dewy boosts it.
+
+| Product    | Region                               | Shift (coverage) | kC  | Smooth | Edge                                                        | Finishes               |
+| ---------- | ------------------------------------ | ---------------- | --- | ------ | ----------------------------------------------------------- | ---------------------- |
+| Foundation | face skin (holes: eyes, brows, lips) | 0.60             | 0.5 | 0.18   | wide (0.07 × face width) so there's no line at hairline/jaw | matte / natural / dewy |
+| Skin tint  | face skin                            | 0.30             | 0.8 | 0.15   | wide                                                        | dewy / matte / natural |
+| Concealer  | under-eye crescents                  | 0.75             | 0.4 | 0.45   | 0.03                                                        | natural / matte / dewy |
+
+**2. Thin translucent layer (`layer`): blush, bronzer, contour, eyeshadow, highlighter.**
+In Kubelka-Munk terms, light passes through a thin pigment film. Each pixel is multiplied in
+linear light by `(product ÷ own mean colour)^density`. At density 1 the region averages
+exactly the product colour. Because it is a multiplication, texture, pores and shading
+survive, and that is what makes blush look natural rather than painted on. The highlighter
+uses density 0 plus a `glow` term: light-reflecting pigment adds light where light falls.
+
+| Product     | Region                                                             | Density | Glow | Edge             | Finishes                           |
+| ----------- | ------------------------------------------------------------------ | ------- | ---- | ---------------- | ---------------------------------- |
+| Blush       | cheek apples (radial)                                              | 0.32    | –    | very soft (0.10) | satin / matte / shimmer            |
+| Bronzer     | cheek hollows, jaw, cheeks                                         | 0.30    | –    | 0.09             | matte / satin / shimmer            |
+| Contour     | cheek hollows, jaw, nose sides                                     | 0.38    | –    | 0.05             | matte                              |
+| Highlighter | cheekbones, nose bridge, cupid's bow, brow bone                    | 0       | 0.20 | 0.055            | shimmer / satin / metallic         |
+| Eyeshadow   | lid (0.62), crease (0.40, or 0.55× with one shade), outer V (0.50) | –       | –    | 0.018–0.03       | matte / satin / shimmer / metallic |
+
+Eyeshadow zones are interpolated from the upper lash line (0) to the brow (1): lid 0–0.45,
+crease 0.30–0.72, and the outer third up to 0.60 (`REGION_CONFIG.eyeshadow`). One shade
+gives lid + a softer crease; `tones` gives lid / crease / outer like a palette (Perfect Corp
+allows up to 5 eyeshadow colours).
+
+**Application order** (build plan §5.4): foundation → skin tint → concealer → contour →
+bronzer → blush → highlighter → eyeshadow → lip liner → lip colour → gloss.
+
+**Measured on synthetic skin** (GPU; shading gradient, red blotches, pores, cheekbone highlight):
+
+| Product            | Result                                                                                                                                                                            |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Foundation (Sand)  | ΔE to the shade 14.2 → 5.9 (60% coverage). Redness variation (a* SD) 2.41 → 1.26. Left/right shading difference kept (17.2 → 17.0 L*). Pore detail 7.4 → 5.0 (−32%, not plastic). |
+| Skin tint          | 30% toward the shade; redness 2.41 → 1.99; most texture kept.                                                                                                                     |
+| Blush (Soft Rose)  | Natural radial flush: Δa* +12.5 at the centre → +10.1 → +5.2 → +1.3 → 0. Pores kept.                                                                                              |
+| Highlighter        | +8 L* on the cheekbone, 0 next to it.                                                                                                                                             |
+| Eyeshadow (Bronze) | Lid moves toward the shade; crease softer.                                                                                                                                        |
+
+First tuning attempts were too strong (foundation pores −53%, blush +17 a*, highlighter
++15 L*) and were toned down for a natural look. Validate on real faces next.
+
+## Eyes and brows (Phase 5, planned recipes; eyeshadow done above)
 
 | Product          | Method                                                                                                               | Controls                                           | Notes                                           |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------- |

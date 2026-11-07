@@ -1,19 +1,31 @@
 import {
-  LIP_CATEGORIES,
-  LIP_FINISHES,
-  LIP_RECIPES,
+  finishesFor,
   type FaceView,
-  type LipCategory,
-  type LipFinish,
+  type Product,
+  type ProductCategory,
+  type ProductFinish,
 } from '../sdk/index';
 
 /**
- * Lip try-on panel, like a shop: product type, shade, finish, intensity. Rendering (blend,
- * coverage, texture, shine, edges) is decided by the SDK's product recipes — never by the
- * shopper. Face and eye products get the same treatment in Phases 4–5.
+ * Look builder, like a shop: pick a product type, tap a shade, choose finish and intensity.
+ * Several products stack into one look (foundation + blush + eyeshadow + lipstick …).
+ * Rendering is decided entirely by the SDK's product recipes.
  */
 
-const CATEGORY_LABELS: Record<LipCategory, string> = {
+interface Shade {
+  name: string;
+  hex: string;
+}
+
+const LABELS: Record<ProductCategory, string> = {
+  foundation: 'Foundation',
+  'skin-tint': 'Skin tint',
+  concealer: 'Concealer',
+  blush: 'Blush',
+  bronzer: 'Bronzer',
+  contour: 'Contour',
+  highlighter: 'Highlighter',
+  eyeshadow: 'Eyeshadow',
   lipstick: 'Lipstick',
   'liquid-lipstick': 'Liquid lipstick',
   'lip-gloss': 'Lip gloss',
@@ -21,7 +33,14 @@ const CATEGORY_LABELS: Record<LipCategory, string> = {
   'lip-liner': 'Lip liner',
 };
 
-const FINISH_LABELS: Record<LipFinish, string> = {
+const GROUPS: { label: string; items: ProductCategory[] }[] = [
+  { label: 'Face', items: ['foundation', 'skin-tint', 'concealer'] },
+  { label: 'Cheeks', items: ['blush', 'bronzer', 'contour', 'highlighter'] },
+  { label: 'Eyes', items: ['eyeshadow'] },
+  { label: 'Lips', items: ['lipstick', 'liquid-lipstick', 'lip-gloss', 'lip-stain', 'lip-liner'] },
+];
+
+const FINISH_LABELS: Record<ProductFinish, string> = {
   matte: 'Matte',
   satin: 'Satin',
   cream: 'Cream',
@@ -29,10 +48,22 @@ const FINISH_LABELS: Record<LipFinish, string> = {
   gloss: 'Gloss',
   shimmer: 'Shimmer',
   metallic: 'Metallic',
+  natural: 'Natural',
+  dewy: 'Dewy',
 };
 
 /** Invented sample shades (no brand assets). */
-const SHADES: { name: string; hex: string }[] = [
+const SKIN: Shade[] = [
+  { name: 'Porcelain', hex: '#f3d9c6' },
+  { name: 'Ivory', hex: '#ebc8ae' },
+  { name: 'Sand', hex: '#d9ae8c' },
+  { name: 'Honey', hex: '#c8956b' },
+  { name: 'Caramel', hex: '#a9744e' },
+  { name: 'Chestnut', hex: '#8a5a3c' },
+  { name: 'Espresso', hex: '#5e3b28' },
+  { name: 'Ebony', hex: '#3f2619' },
+];
+const LIPS: Shade[] = [
   { name: 'Ruby', hex: '#9b1b30' },
   { name: 'Nude Rose', hex: '#c27c7c' },
   { name: 'Coral Crush', hex: '#e8604c' },
@@ -44,28 +75,85 @@ const SHADES: { name: string; hex: string }[] = [
   { name: 'Cherry Red', hex: '#d0213a' },
   { name: 'Plum Noir', hex: '#4a1c2e' },
 ];
+const SHADES: Record<ProductCategory, Shade[]> = {
+  foundation: SKIN,
+  'skin-tint': SKIN,
+  concealer: SKIN.map((s) => ({ name: `${s.name} Light`, hex: lighten(s.hex, 0.12) })),
+  blush: [
+    { name: 'Peach Glow', hex: '#f2a08a' },
+    { name: 'Soft Rose', hex: '#e07a8f' },
+    { name: 'Berry Flush', hex: '#b4466a' },
+    { name: 'Coral Kiss', hex: '#f07860' },
+    { name: 'Mauve Dusk', hex: '#b9788a' },
+    { name: 'Brick Warmth', hex: '#b4553f' },
+  ],
+  bronzer: [
+    { name: 'Sun-kissed', hex: '#b8835a' },
+    { name: 'Bronze', hex: '#94603b' },
+    { name: 'Deep Bronze', hex: '#6e4428' },
+  ],
+  contour: [
+    { name: 'Soft Taupe', hex: '#8c6f5e' },
+    { name: 'Cool Brown', hex: '#6e5548' },
+    { name: 'Deep Shade', hex: '#4a372e' },
+  ],
+  highlighter: [
+    { name: 'Champagne', hex: '#f5e3c2' },
+    { name: 'Pearl', hex: '#f4eef0' },
+    { name: 'Rose Gold', hex: '#f0c4b0' },
+    { name: 'Gold', hex: '#e8c27a' },
+  ],
+  eyeshadow: [
+    { name: 'Champagne', hex: '#e8d2b0' },
+    { name: 'Rose Gold', hex: '#d49a8a' },
+    { name: 'Copper', hex: '#b5652f' },
+    { name: 'Bronze', hex: '#9c6a3f' },
+    { name: 'Plum', hex: '#6b3a55' },
+    { name: 'Smoky', hex: '#3c3a3e' },
+    { name: 'Emerald', hex: '#2f6f5a' },
+    { name: 'Navy', hex: '#2b3a5c' },
+  ],
+  lipstick: LIPS,
+  'liquid-lipstick': LIPS,
+  'lip-gloss': LIPS,
+  'lip-stain': LIPS,
+  'lip-liner': LIPS,
+};
+
+/** Lip colour products share one slot (only one worn at a time); liner has its own. */
+function slotOf(c: ProductCategory): string {
+  return ['lipstick', 'liquid-lipstick', 'lip-gloss', 'lip-stain'].includes(c) ? 'lips' : c;
+}
+
+function lighten(hex: string, t: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v: number): string =>
+    Math.round(v + (255 - v) * t)
+      .toString(16)
+      .padStart(2, '0');
+  return `#${ch((n >> 16) & 255)}${ch((n >> 8) & 255)}${ch(n & 255)}`;
+}
 
 export function mountTestEffect(host: HTMLElement, view: FaceView, initial: string | null): void {
-  const state = {
-    on: initial !== 'off',
-    category: 'lipstick' as LipCategory,
-    shade: 0,
-    finish: LIP_RECIPES.lipstick.defaultFinish as LipFinish,
-    intensity: 1,
-  };
+  const look = new Map<string, Product & { shadeName: string }>();
+  let category: ProductCategory = 'lipstick';
+  let showMakeup = true;
+  const finishByCat = new Map<ProductCategory, ProductFinish>();
+  const intensityByCat = new Map<ProductCategory, number>();
 
   host.innerHTML = '';
   const title = document.createElement('h2');
-  title.textContent = 'Lip try-on';
+  title.textContent = 'Build a look';
+  const applied = document.createElement('div');
+  applied.className = 'chips';
   const grid = document.createElement('div');
   grid.className = 'fx-grid';
   const swatches = document.createElement('div');
   swatches.className = 'swatches';
   swatches.setAttribute('role', 'radiogroup');
-  swatches.setAttribute('aria-label', 'Shade');
   const shadeName = document.createElement('p');
   shadeName.className = 'shade-name';
-  host.append(title, swatches, shadeName, grid);
+  host.append(title, grid, swatches, shadeName, applied);
 
   const field = (label: string, input: HTMLElement): void => {
     const l = document.createElement('label');
@@ -74,22 +162,23 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
     l.append(span, input);
     grid.append(l);
   };
-  const select = <T extends string>(options: readonly T[], labels: Record<T, string>) => {
-    const s = document.createElement('select');
-    for (const o of options) {
-      const opt = document.createElement('option');
-      opt.value = o;
-      opt.textContent = labels[o];
-      s.append(opt);
-    }
-    return s;
-  };
 
-  const categorySel = select(LIP_CATEGORIES, CATEGORY_LABELS);
-  const finishSel = select(LIP_FINISHES, FINISH_LABELS);
+  const categorySel = document.createElement('select');
+  for (const g of GROUPS) {
+    const og = document.createElement('optgroup');
+    og.label = g.label;
+    for (const c of g.items) {
+      const o = document.createElement('option');
+      o.value = c;
+      o.textContent = LABELS[c];
+      og.append(o);
+    }
+    categorySel.append(og);
+  }
+  const finishSel = document.createElement('select');
   const intensity = document.createElement('input');
   intensity.type = 'range';
-  intensity.min = '0.2';
+  intensity.min = '0.15';
   intensity.max = '1';
   intensity.step = '0.05';
   const toggle = document.createElement('button');
@@ -101,63 +190,120 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
   field('Intensity', intensity);
   field('Before / after', toggle);
 
-  const swatchBtns = SHADES.map((s, i) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'swatch';
-    b.style.background = s.hex;
-    b.setAttribute('role', 'radio');
-    b.setAttribute('aria-label', s.name);
-    b.title = s.name;
-    b.addEventListener('click', () => {
-      state.shade = i;
-      state.on = true;
-      sync();
-    });
-    swatches.append(b);
-    return b;
-  });
-
-  const sync = (): void => {
-    categorySel.value = state.category;
-    finishSel.value = state.finish;
-    intensity.value = String(state.intensity);
-    toggle.textContent = state.on ? 'Show without' : 'Show with';
-    swatchBtns.forEach((b, i) => b.setAttribute('aria-checked', String(i === state.shade)));
-    const shade = SHADES[state.shade] ?? SHADES[0];
-    shadeName.textContent = `${shade?.name ?? ''} · ${CATEGORY_LABELS[state.category]} · ${FINISH_LABELS[state.finish]}`;
-    view.setLipProducts(
-      state.on && shade
-        ? [
-            {
-              id: 'lip',
-              category: state.category,
-              color: shade.hex,
-              finish: state.finish,
-              intensity: state.intensity,
-            },
-          ]
-        : [],
-    );
+  const current = (): (Product & { shadeName: string }) | undefined => {
+    const p = look.get(slotOf(category));
+    return p && p.category === category ? p : undefined;
   };
 
+  const apply = (): void => {
+    view.setProducts(showMakeup ? [...look.values()] : []);
+    toggle.textContent = showMakeup ? 'Show without' : 'Show with';
+    renderChips();
+  };
+
+  const setShade = (s: Shade): void => {
+    look.set(slotOf(category), {
+      id: slotOf(category),
+      category,
+      color: s.hex,
+      shadeName: s.name,
+      finish: finishByCat.get(category) ?? (finishesFor(category)[0] as ProductFinish),
+      intensity: intensityByCat.get(category) ?? 1,
+    });
+    showMakeup = true;
+    syncPanel();
+    apply();
+  };
+
+  const updateCurrent = (): void => {
+    const p = current();
+    if (!p) return;
+    p.finish = finishByCat.get(category) ?? p.finish;
+    p.intensity = intensityByCat.get(category) ?? p.intensity;
+    apply();
+  };
+
+  function syncPanel(): void {
+    categorySel.value = category;
+    finishSel.innerHTML = '';
+    for (const f of finishesFor(category)) {
+      const o = document.createElement('option');
+      o.value = f;
+      o.textContent = FINISH_LABELS[f];
+      finishSel.append(o);
+    }
+    finishSel.value = finishByCat.get(category) ?? (finishesFor(category)[0] as ProductFinish);
+    intensity.value = String(intensityByCat.get(category) ?? 1);
+    const cur = current();
+    swatches.innerHTML = '';
+    swatches.setAttribute('aria-label', `${LABELS[category]} shade`);
+    for (const s of SHADES[category]) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'swatch';
+      b.style.background = s.hex;
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-label', s.name);
+      b.setAttribute('aria-checked', String(cur?.color === s.hex));
+      b.title = s.name;
+      b.addEventListener('click', () => setShade(s));
+      swatches.append(b);
+    }
+    shadeName.textContent = cur
+      ? `${cur.shadeName} · ${LABELS[category]}`
+      : `Tap a shade to apply ${LABELS[category].toLowerCase()}`;
+  }
+
+  function renderChips(): void {
+    applied.innerHTML = '';
+    if (look.size === 0) return;
+    for (const [slot, p] of look) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip';
+      chip.setAttribute('aria-label', `Remove ${LABELS[p.category]} ${p.shadeName}`);
+      const dot = document.createElement('span');
+      dot.className = 'chip-dot';
+      dot.style.background = p.color;
+      chip.append(dot, `${LABELS[p.category]} · ${p.shadeName}`, ' ✕');
+      chip.addEventListener('click', () => {
+        look.delete(slot);
+        syncPanel();
+        apply();
+      });
+      applied.append(chip);
+    }
+  }
+
   categorySel.addEventListener('change', () => {
-    state.category = categorySel.value as LipCategory;
-    state.finish = LIP_RECIPES[state.category].defaultFinish;
-    sync();
+    category = categorySel.value as ProductCategory;
+    syncPanel();
   });
   finishSel.addEventListener('change', () => {
-    state.finish = finishSel.value as LipFinish;
-    sync();
+    finishByCat.set(category, finishSel.value as ProductFinish);
+    updateCurrent();
   });
   intensity.addEventListener('input', () => {
-    state.intensity = Number(intensity.value);
-    sync();
+    intensityByCat.set(category, Number(intensity.value));
+    updateCurrent();
   });
   toggle.addEventListener('click', () => {
-    state.on = !state.on;
-    sync();
+    showMakeup = !showMakeup;
+    apply();
   });
 
-  sync();
+  // Start with a ruby lipstick so the camera shows something straight away (?fx=off: none).
+  if (initial !== 'off') {
+    const ruby = LIPS[0] as Shade;
+    look.set('lips', {
+      id: 'lips',
+      category: 'lipstick',
+      color: ruby.hex,
+      shadeName: ruby.name,
+      finish: 'satin',
+      intensity: 1,
+    });
+  }
+  syncPanel();
+  apply();
 }

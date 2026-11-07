@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.0.8] — 2026-11-08 — Phase 4: Face makeup + eyeshadow
+
+Foundation, skin tint, concealer, blush, bronzer, contour, highlighter and eyeshadow, built
+on the same research as lipstick (no blend modes; lit by the measured scene light).
+
+- **Coverage technique** (foundation, skin tint, concealer): the face's mean colour moves
+  toward the shade by the product's coverage, blotchiness and redness are evened out, the
+  face's light and shadow are kept, fine detail is softened slightly, and the finish
+  (matte/natural/dewy) reshapes the shine. A wide soft edge means no line at the hairline or jaw.
+- **Thin-layer technique** (blush, bronzer, contour, eyeshadow, highlighter): Kubelka-Munk
+  thin film. Pixels are multiplied in linear light by (product ÷ own skin)^density, so
+  texture and shading survive and blush reads as a natural flush. Highlighter adds light.
+- Eyeshadow zones (lid, crease, outer V) interpolated between the lash line and the brow;
+  one shade or up to three tones.
+- `Product` / `FaceView.setProducts()`: any mix of lip, face and eye products forms a look,
+  drawn in realistic order. `finishesFor()`, `productEffects()`, `lookEffects()`.
+- Demo: "Build a look" panel with grouped products, invented shades (8 skin tones, blush,
+  bronzer, contour, highlighter, eyeshadow, lips), finish, intensity, removable chips and
+  before/after.
+- Measured on synthetic skin: foundation evens redness by half while keeping shading;
+  natural blush flush ≈ +12 a* fading smoothly to 0; highlighter +8 L*. See
+  docs/RENDERING_RESEARCH.md.
+
 ## [0.0.7] — 2026-11-07 — Lipstick lit by the room's light (no more glow)
 
 Testing showed lipstick "glowing" in a dim room, like a screen/overlay layer: the shade was

@@ -41,5 +41,6 @@ vec3 blendMode(vec3 b, vec3 s, int mode) {
   if (mode == 4) return bSoftLight(b, s);
   if (mode == 5) return bColor(b, s);
   if (mode == 6) return s;
+  if (mode == 7) return s; // 'layer' is computed in composite.frag.glsl
   return s;
 }

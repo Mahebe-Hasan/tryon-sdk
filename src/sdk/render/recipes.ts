@@ -47,6 +47,13 @@ export interface PigmentParams {
   sparkleDensity: number;
   /** How much the shade follows scene brightness (kept low: LipAT uses none). */
   lightAdapt: number;
+  /**
+   * How far the region's mean colour moves to the product colour (coverage). 1 = all the way
+   * (lipstick); foundation ≈ 0.6, skin tint ≈ 0.3 so the person's own skin stays visible.
+   */
+  shift: number;
+  /** Fine-detail softening 0–1 (foundation fills fine lines and pores; lips 0). */
+  smooth: number;
 }
 
 export interface LipRecipe {
@@ -65,7 +72,7 @@ export interface LipRecipe {
 /** Finish → shine behaviour. Roughness values from LipAT (0.1 glossy, 0.7 matte). */
 export const LIP_FINISH_PARAMS: Record<
   LipFinish,
-  Omit<PigmentParams, 'kL' | 'kC' | 'lightAdapt'> & { opacityScale: number }
+  Omit<PigmentParams, 'kL' | 'kC' | 'lightAdapt' | 'shift' | 'smooth'> & { opacityScale: number }
 > = {
   matte: {
     roughness: 0.7,
@@ -206,5 +213,7 @@ export function pigmentParams(category: LipCategory, finish: LipFinish): Pigment
     sparkle: f.sparkle,
     sparkleDensity: f.sparkleDensity,
     lightAdapt: LIP_LIGHT_ADAPT,
+    shift: 1,
+    smooth: 0,
   };
 }

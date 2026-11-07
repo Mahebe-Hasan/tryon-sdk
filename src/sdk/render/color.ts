@@ -22,6 +22,12 @@ export const BLEND_MODES = [
    * `lipSpecular` and docs/RENDERING_RESEARCH.md.
    */
   'pigment',
+  /**
+   * Thin translucent pigment layer (blush, bronzer, contour, eyeshadow, highlighter): each
+   * pixel × (product ÷ region mean)^density in linear light (Kubelka-Munk thin layer). See
+   * `layerFactor` and docs/RENDERING_RESEARCH.md.
+   */
+  'layer',
 ] as const;
 export type BlendMode = (typeof BLEND_MODES)[number];
 
@@ -138,6 +144,18 @@ export function lipSpecular(s: number, roughness: number): number {
   return 1 - Math.pow(1 - Math.min(1, Math.max(0, s)), gamma);
 }
 
+/**
+ * Thin-layer factor (CPU reference of the shader): per linear channel
+ * (product ÷ regionMean)^density, ratio clamped to 0–2.5. Multiply a linear skin pixel by it.
+ * At density 1 a pixel equal to the region mean becomes the product colour; at 0 nothing changes.
+ */
+export function layerFactor(productLin: RGB, regionMeanLin: RGB, density: number): RGB {
+  return productLin.map((p, i) => {
+    const ratio = Math.min(2.5, Math.max(0, p / Math.max(regionMeanLin[i] as number, 0.02)));
+    return Math.pow(ratio, density);
+  }) as RGB;
+}
+
 /** Rec. 601 luma on gamma-encoded values (matches the shader's lum()). */
 export function luma([r, g, b]: RGB): number {
   return 0.299 * r + 0.587 * g + 0.114 * b;
@@ -191,6 +209,7 @@ export function colorBlend(b: RGB, s: RGB): RGB {
 export function blend(mode: BlendMode, b: RGB, s: RGB): RGB {
   switch (mode) {
     case 'pigment':
+    case 'layer':
       return [...s];
     case 'multiply':
       return multiply(b, s);

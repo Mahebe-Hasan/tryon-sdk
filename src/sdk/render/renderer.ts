@@ -307,18 +307,27 @@ export class WebGLRenderer implements Renderer {
     gl.uniform1f(p.loc('u_matte'), f.matte);
     gl.uniform1f(p.loc('u_highlightKeep'), f.highlightKeep);
     gl.uniform1f(p.loc('u_gloss'), f.gloss);
-    gl.uniform1f(p.loc('u_sparkle'), pg ? pg.sparkle : f.sparkle);
+    const ly = fx.layer;
+    gl.uniform1f(p.loc('u_sparkle'), pg ? pg.sparkle : ly ? ly.sparkle : f.sparkle);
     gl.uniform1f(p.loc('u_metal'), f.metal);
+    // Light the product like the face: daylight shade × scene illuminant (linear RGB).
+    const ill = frame.illuminant ?? [1, 1, 1];
+    const litLin = fx.color.map((c, i) => Math.min(1, srgbToLinear(c) * (ill[i] as number))) as RGB;
+    if (ly) {
+      gl.uniform3f(p.loc('u_productLin'), litLin[0], litLin[1], litLin[2]);
+      gl.uniform1f(p.loc('u_density'), ly.density);
+      gl.uniform1f(p.loc('u_glow'), ly.glow);
+      gl.uniform1f(p.loc('u_roughness'), ly.roughness);
+      gl.uniform1f(p.loc('u_specScale'), ly.specScale);
+      gl.uniform1f(p.loc('u_specTint'), ly.specTint);
+    }
     if (pg) {
-      // Light the product like the face: daylight shade × scene illuminant (linear RGB).
-      const ill = frame.illuminant ?? [1, 1, 1];
-      const lit = fx.color.map((c, i) =>
-        linearToSrgb(Math.min(1, srgbToLinear(c) * (ill[i] as number))),
-      ) as RGB;
-      const lab = rgbToLab(lit);
+      const lab = rgbToLab(litLin.map(linearToSrgb) as RGB);
       gl.uniform3f(p.loc('u_productLab'), lab[0], lab[1], lab[2]);
       gl.uniform1f(p.loc('u_kL'), pg.kL);
       gl.uniform1f(p.loc('u_kC'), pg.kC);
+      gl.uniform1f(p.loc('u_shift'), pg.shift);
+      gl.uniform1f(p.loc('u_smooth'), pg.smooth);
       gl.uniform1f(p.loc('u_roughness'), pg.roughness);
       gl.uniform1f(p.loc('u_specScale'), pg.specScale);
       gl.uniform1f(p.loc('u_specTint'), pg.specTint);
@@ -332,7 +341,10 @@ export class WebGLRenderer implements Renderer {
       false,
       frame.faceTransform ?? new Float32Array([1 / this.w, 0, 0, 0, 1 / this.w, 0, 0, 0, 1]),
     );
-    gl.uniform1f(p.loc('u_sparkleDensity'), pg ? pg.sparkleDensity : RENDER_CONFIG.sparkleDensity);
+    gl.uniform1f(
+      p.loc('u_sparkleDensity'),
+      pg ? pg.sparkleDensity : ly ? ly.sparkleDensity : RENDER_CONFIG.sparkleDensity,
+    );
     gl.uniform2f(p.loc('u_size'), this.w, this.h);
     gl.uniform1f(p.loc('u_time'), frame.time);
     this.drawQuad();

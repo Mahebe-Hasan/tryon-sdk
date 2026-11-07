@@ -51,6 +51,12 @@ export type RegionId =
   | 'highlightBrowBone.L'
   | 'eyelid.R'
   | 'eyelid.L'
+  | 'eyelidLid.R'
+  | 'eyelidLid.L'
+  | 'eyelidCrease.R'
+  | 'eyelidCrease.L'
+  | 'eyelidOuter.R'
+  | 'eyelidOuter.L'
   | 'lashLine.R'
   | 'lashLine.L'
   | 'linerWing.R'
@@ -88,6 +94,11 @@ export const REGION_CONFIG = {
   cupidsBowT: 0.35,
   /** Extra curve points per lip-outline segment (0 = MediaPipe's straight segments). */
   lipCurveSubdivisions: 3,
+  /**
+   * Eyeshadow zones as fractions of the way from the lash line (0) to the brow (1):
+   * lid = 0…lidTop, crease band = creaseBottom…creaseTop, outer V = outer third up to outerTop.
+   */
+  eyeshadow: { lidTop: 0.45, creaseBottom: 0.3, creaseTop: 0.72, outerTop: 0.6, outerPoints: 4 },
 };
 
 // ---- Index sets from MediaPipe constants -------------------------------------------------
@@ -247,6 +258,12 @@ export function computeRegions(
     const upperLid = pts(s.upperLid);
     const lowerLid = pts(s.lowerLid);
     const browLower = pts(s.browLower);
+    // Brow resampled to the lid's point count so we can interpolate lash line → brow.
+    const browAligned = resample(browLower, upperLid.length);
+    const lidLine = (t: number): Vec2[] => upperLid.map((p, i) => lerp(p, browAligned[i] ?? p, t));
+    const es = cfg.eyeshadow;
+    const creaseLo = lidLine(es.creaseBottom);
+    const outerN = Math.max(2, Math.min(upperLid.length, es.outerPoints));
 
     const irisCenter = P(s.irisCenter);
     const irisRadius = iris.reduce((acc, i) => acc + dist(P(i), irisCenter), 0) / iris.length;
@@ -312,6 +329,26 @@ export function computeRegions(
         shape: { kind: 'polygon', loops: [[...upperLid, ...[...browLower].reverse()]] },
       },
       {
+        id: `eyelidLid.${side}`,
+        group: 'eyes',
+        shape: { kind: 'polygon', loops: [[...upperLid, ...lidLine(es.lidTop).reverse()]] },
+      },
+      {
+        id: `eyelidCrease.${side}`,
+        group: 'eyes',
+        shape: { kind: 'polygon', loops: [[...creaseLo, ...lidLine(es.creaseTop).reverse()]] },
+      },
+      {
+        id: `eyelidOuter.${side}`,
+        group: 'eyes',
+        shape: {
+          kind: 'polygon',
+          loops: [
+            [...upperLid.slice(0, outerN), ...lidLine(es.outerTop).slice(0, outerN).reverse()],
+          ],
+        },
+      },
+      {
         id: `lashLine.${side}`,
         group: 'eyes',
         shape: { kind: 'polyline', points: upperLid, width: faceW * cfg.lashLineWidth },
@@ -339,6 +376,25 @@ export function computeRegions(
     );
   }
   return regions;
+}
+
+/** Resample a polyline to n points evenly spaced by arc length. */
+function resample(pts: readonly Vec2[], n: number): Vec2[] {
+  if (pts.length === 0 || n < 2) return [...pts];
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) {
+    cum.push((cum[i - 1] as number) + dist(pts[i - 1] as Vec2, pts[i] as Vec2));
+  }
+  const total = cum[cum.length - 1] as number;
+  const out: Vec2[] = [];
+  let j = 0;
+  for (let k = 0; k < n; k++) {
+    const d = (total * k) / (n - 1);
+    while (j < pts.length - 2 && (cum[j + 1] as number) < d) j++;
+    const seg = (cum[j + 1] as number) - (cum[j] as number) || 1;
+    out.push(lerp(pts[j] as Vec2, pts[j + 1] ?? (pts[j] as Vec2), (d - (cum[j] as number)) / seg));
+  }
+  return out;
 }
 
 function sub(a: Vec2, b: Vec2): Vec2 {

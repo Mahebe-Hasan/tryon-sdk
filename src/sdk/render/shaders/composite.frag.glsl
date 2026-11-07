@@ -45,6 +45,14 @@ uniform float u_specTint;
 uniform vec4 u_glossSpot;   // centre xy (px), radii along/across lip axis (px)
 uniform vec2 u_glossAxis;   // unit lip axis
 uniform float u_glossSpotStrength;
+// Coverage products (foundation, skin tint, concealer) reuse the pigment path:
+uniform float u_shift;      // how far the region mean moves to the product (1 = lipstick)
+uniform float u_smooth;     // fine-detail softening (foundation fills fine lines)
+
+// Thin layer (blush, bronzer, contour, eyeshadow, highlighter)
+uniform vec3 u_productLin;  // product colour lit by the scene, linear RGB
+uniform float u_density;
+uniform float u_glow;
 
 // Sparkle (shimmer/metallic), anchored to the face
 uniform float u_sparkle;
@@ -87,16 +95,21 @@ void main() {
   if (u_mode == 6) {
     // 1. Split into diffuse colour and specular shine.
     float s = specEstimate(origL, localL, u_specThresh, u_specGain);
-    vec3 lab = rgb2lab(clamp(orig - s, 0.0, 1.0));
+    vec3 lab = rgb2lab(clamp(base - s, 0.0, 1.0));
     // 2. Region mean of the diffuse colour (mask-weighted, from the stats mip).
     vec4 st = textureLod(u_stats, u_regionCenter, u_regionLod);
     vec3 mu = st.a > 0.004
       ? vec3(st.r / st.a * 100.0, st.g / st.a * 255.0 - 128.0, st.b / st.a * 255.0 - 128.0)
       : lab;
     // 3. Shift the mean to the product colour, keep kL/kC of each pixel's own variation.
-    vec3 tgt = u_productLab;
+    vec3 tgt = mix(mu, u_productLab, u_shift);
     tgt.x += u_lightAdapt * clamp(mu.x - u_refL, -12.0, 12.0);
     vec3 nl = vec3(tgt.x + u_kL * (lab.x - mu.x), tgt.yz + u_kC * (lab.yz - mu.yz));
+    if (u_smooth > 0.0) {
+      // Soften fine lines/pores: remove part of the fine-scale lightness detail.
+      float fineL = lum(textureLod(u_video, v_uv, max(u_detailLod - 1.0, 0.0)).rgb);
+      nl.x -= u_smooth * (origL - fineL) * 90.0;
+    }
     vec3 diffuse = lab2rgb(nl);
     // 4. Re-shape the shine for the finish: S' = 1 - (1 - S)^gamma, gamma = 2.42 e^(-1.55 r).
     float gamma = 2.42 * exp(-1.55 * u_roughness);
@@ -114,6 +127,31 @@ void main() {
     vec3 specColor = mix(vec3(1.0), mix(u_color, vec3(1.0), 0.3), u_specTint);
     // 5. Recombine with a screen blend (softer than add), then sparkle.
     vec3 res = 1.0 - (1.0 - diffuse) * (1.0 - spec * specColor);
+    if (u_sparkle > 0.0) res += u_sparkle * sparkleAt(spec) * mix(vec3(1.0), specColor, 0.5);
+    o = vec4(mix(base, clamp(res, 0.0, 1.0), m), 1.0);
+    return;
+  }
+
+  if (u_mode == 7) {
+    // Thin translucent layer (Kubelka-Munk): light passes through the pigment, so each pixel
+    // is multiplied — in linear light — by (product / own mean colour)^density.
+    float s = specEstimate(origL, localL, u_specThresh, u_specGain);
+    vec4 st = textureLod(u_stats, u_regionCenter, u_regionLod);
+    vec3 mu = st.a > 0.004
+      ? vec3(st.r / st.a * 100.0, st.g / st.a * 255.0 - 128.0, st.b / st.a * 255.0 - 128.0)
+      : rgb2lab(clamp(orig - s, 0.0, 1.0));
+    vec3 muLin = max(srgbToLinear3(lab2rgb(mu)), vec3(0.02));
+    vec3 ratio = clamp(u_productLin / muLin, 0.0, 2.5);
+    vec3 dLin = srgbToLinear3(clamp(base - s, 0.0, 1.0)) * pow(ratio, vec3(u_density));
+    // Highlighter: light-reflecting pigment adds light where light falls on the skin.
+    if (u_glow > 0.0) {
+      float lit = clamp(origL / max(lum(lab2rgb(mu)), 0.05), 0.3, 1.8);
+      dLin += u_glow * u_productLin * lit;
+    }
+    float gamma = 2.42 * exp(-1.55 * u_roughness);
+    float spec = clamp((1.0 - pow(1.0 - s, gamma)) * u_specScale, 0.0, 1.0);
+    vec3 specColor = mix(vec3(1.0), mix(u_color, vec3(1.0), 0.3), u_specTint);
+    vec3 res = 1.0 - (1.0 - linearToSrgb3(dLin)) * (1.0 - spec * specColor);
     if (u_sparkle > 0.0) res += u_sparkle * sparkleAt(spec) * mix(vec3(1.0), specColor, 0.5);
     o = vec4(mix(base, clamp(res, 0.0, 1.0), m), 1.0);
     return;

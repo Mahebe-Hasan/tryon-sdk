@@ -7,7 +7,8 @@ import { Canvas2DRenderer } from '../render/fallback2d';
 import { hexToRgb, type BlendMode, type RGB } from '../render/color';
 import type { Finish, RenderEffect, Renderer } from '../render/types';
 import type { PigmentParams } from '../render/recipes';
-import { lipProductEffect, type LipProduct } from './products';
+import type { LayerParams } from '../render/faceRecipes';
+import { lookEffects, type Product } from './products';
 import { FaceTracker } from '../tracking/face';
 import { faceMetrics, lipGlossSpot } from '../tracking/metrics';
 import { Presence } from '../tracking/presence';
@@ -48,6 +49,8 @@ export interface EffectSpec {
   featherInset?: number;
   /** Pigment technique parameters (lip products; set by `lipProductEffect`). */
   pigment?: PigmentParams;
+  /** Thin-layer parameters (blush, bronzer, contour, highlighter, eyeshadow). */
+  layer?: LayerParams;
   /** Add the synthetic lower-lip wet highlight (lip products). */
   lipHighlight?: boolean;
 }
@@ -150,13 +153,24 @@ export class FaceView {
       if (s.blend === 'pigment' && !s.pigment) {
         throw new Error(`Effect "${s.id}": blend 'pigment' needs pigment params`);
       }
+      if (s.blend === 'layer' && !s.layer) {
+        throw new Error(`Effect "${s.id}": blend 'layer' needs layer params`);
+      }
     }
     this.effects = specs.map(({ color, ...rest }) => ({ ...rest, rgb: hexToRgb(color) }));
   }
 
-  /** Apply lip products (category + shade + finish); rendering follows the product recipes. */
-  setLipProducts(products: LipProduct[]): void {
-    this.setEffects(products.map(lipProductEffect));
+  /**
+   * Apply a look: any mix of lip, face and eye products (category + shade + finish +
+   * intensity). Rendering and application order follow the product recipes.
+   */
+  setProducts(products: readonly Product[]): void {
+    this.setEffects(lookEffects(products));
+  }
+
+  /** @deprecated use setProducts */
+  setLipProducts(products: readonly Product[]): void {
+    this.setProducts(products);
   }
 
   /** Start camera and tracking. Resolves with the final camera state. */
@@ -397,6 +411,7 @@ export class FaceView {
       featherPx: fx.feather * faceWidth,
       featherInset: fx.featherInset ?? 0,
       ...(fx.pigment && { pigment: fx.pigment }),
+      ...(fx.layer && { layer: fx.layer }),
       ...(fx.lipHighlight && { glossSpot: lipGlossSpot(lm, w, h) }),
     }));
   }
