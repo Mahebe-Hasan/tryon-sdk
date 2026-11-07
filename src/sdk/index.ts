@@ -5,7 +5,7 @@
  * blocks below are exported for the demo and for testing.
  */
 
-export const VERSION = '0.0.8';
+export const VERSION = '0.0.9';
 
 export const PRIVACY_STATEMENT =
   'Your camera stays on your device. The try-on runs entirely in your browser — no images or video are uploaded, stored, or shared.';
@@ -81,6 +81,9 @@ export {
 } from './session/products';
 export {
   EYESHADOW_RECIPE,
+  BLUSH_STYLES,
+  BLUSH_STYLE_NAMES,
+  type BlushStyle,
   FACE_CATEGORIES,
   FACE_FINISHES,
   FACE_FINISH_PARAMS,

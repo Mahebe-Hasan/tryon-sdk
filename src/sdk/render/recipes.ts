@@ -54,6 +54,8 @@ export interface PigmentParams {
   shift: number;
   /** Fine-detail softening 0–1 (foundation fills fine lines and pores; lips 0). */
   smooth: number;
+  /** 0–1: apply only to skin, not to much darker hair/beard pixels (face products 1, lips 0). */
+  skinOnly: number;
 }
 
 export interface LipRecipe {
@@ -72,7 +74,9 @@ export interface LipRecipe {
 /** Finish → shine behaviour. Roughness values from LipAT (0.1 glossy, 0.7 matte). */
 export const LIP_FINISH_PARAMS: Record<
   LipFinish,
-  Omit<PigmentParams, 'kL' | 'kC' | 'lightAdapt' | 'shift' | 'smooth'> & { opacityScale: number }
+  Omit<PigmentParams, 'kL' | 'kC' | 'lightAdapt' | 'shift' | 'smooth' | 'skinOnly'> & {
+    opacityScale: number;
+  }
 > = {
   matte: {
     roughness: 0.7,
@@ -215,5 +219,6 @@ export function pigmentParams(category: LipCategory, finish: LipFinish): Pigment
     lightAdapt: LIP_LIGHT_ADAPT,
     shift: 1,
     smooth: 0,
+    skinOnly: 0,
   };
 }

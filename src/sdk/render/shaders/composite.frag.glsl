@@ -18,6 +18,9 @@ uniform float u_featherInset;
 // Region statistics lookup (mip level ≈ region size, sampled at the region centre).
 uniform vec2 u_regionCenter;
 uniform float u_regionLod;
+// Per-shape stats samples (uv, lod) — summed so split regions (two cheeks) average correctly.
+uniform vec3 u_statPts[8];
+uniform int u_statN;
 
 uniform float u_lightAdapt;
 uniform float u_refLum;     // generic modes: luminance 0-1
@@ -48,6 +51,9 @@ uniform float u_glossSpotStrength;
 // Coverage products (foundation, skin tint, concealer) reuse the pigment path:
 uniform float u_shift;      // how far the region mean moves to the product (1 = lipstick)
 uniform float u_smooth;     // fine-detail softening (foundation fills fine lines)
+// 0–1: apply only to skin. Pixels far darker than the region's skin mean (beard, stubble,
+// nostrils, hair) get less product; ordinary shading (side of face) is within the margin.
+uniform float u_skinOnly;
 
 // Thin layer (blush, bronzer, contour, eyeshadow, highlighter)
 uniform vec3 u_productLin;  // product colour lit by the scene, linear RGB
@@ -66,14 +72,30 @@ uniform float u_time;
 
 float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 
+float skinWeight(float pixL, float meanL) {
+  return mix(1.0, smoothstep(-32.0, -16.0, pixL - meanL), u_skinOnly);
+}
+
+// Mask-weighted mean diffuse Lab of the region (see stats.frag.glsl); fallback if empty.
+vec3 regionMeanLab(vec3 fallback) {
+  vec4 acc = vec4(0.0);
+  for (int i = 0; i < 8; i++) {
+    if (i >= u_statN) break;
+    acc += textureLod(u_stats, u_statPts[i].xy, u_statPts[i].z);
+  }
+  if (acc.a < 0.002) return fallback;
+  return vec3(acc.r / acc.a * 100.0, acc.g / acc.a * 255.0 - 128.0, acc.b / acc.a * 255.0 - 128.0);
+}
+
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
-float sparkleAt(float spec) {
+float sparkleAt(float spec, float light) {
   vec2 fp = (u_faceXform * vec3(v_uv * u_size, 1.0)).xy * u_sparkleDensity;
   float h = hash(floor(fp));
   float twinkle = 0.5 + 0.5 * sin(u_time * 5.0 + h * 50.0);
   float dotShape = smoothstep(0.45, 0.0, length(fract(fp) - 0.5));
-  return step(0.92, h) * dotShape * twinkle * (0.6 + spec);
+  // Particles only glint where light falls on them.
+  return step(0.92, h) * dotShape * twinkle * (0.6 + spec) * smoothstep(0.25, 0.75, light);
 }
 
 void main() {
@@ -97,10 +119,8 @@ void main() {
     float s = specEstimate(origL, localL, u_specThresh, u_specGain);
     vec3 lab = rgb2lab(clamp(base - s, 0.0, 1.0));
     // 2. Region mean of the diffuse colour (mask-weighted, from the stats mip).
-    vec4 st = textureLod(u_stats, u_regionCenter, u_regionLod);
-    vec3 mu = st.a > 0.004
-      ? vec3(st.r / st.a * 100.0, st.g / st.a * 255.0 - 128.0, st.b / st.a * 255.0 - 128.0)
-      : lab;
+    vec3 mu = regionMeanLab(lab);
+    m *= skinWeight(lab.x, mu.x);
     // 3. Shift the mean to the product colour, keep kL/kC of each pixel's own variation.
     vec3 tgt = mix(mu, u_productLab, u_shift);
     tgt.x += u_lightAdapt * clamp(mu.x - u_refL, -12.0, 12.0);
@@ -127,7 +147,7 @@ void main() {
     vec3 specColor = mix(vec3(1.0), mix(u_color, vec3(1.0), 0.3), u_specTint);
     // 5. Recombine with a screen blend (softer than add), then sparkle.
     vec3 res = 1.0 - (1.0 - diffuse) * (1.0 - spec * specColor);
-    if (u_sparkle > 0.0) res += u_sparkle * sparkleAt(spec) * mix(vec3(1.0), specColor, 0.5);
+    if (u_sparkle > 0.0) res += u_sparkle * sparkleAt(spec, origL) * mix(vec3(1.0), specColor, 0.5);
     o = vec4(mix(base, clamp(res, 0.0, 1.0), m), 1.0);
     return;
   }
@@ -136,10 +156,8 @@ void main() {
     // Thin translucent layer (Kubelka-Munk): light passes through the pigment, so each pixel
     // is multiplied — in linear light — by (product / own mean colour)^density.
     float s = specEstimate(origL, localL, u_specThresh, u_specGain);
-    vec4 st = textureLod(u_stats, u_regionCenter, u_regionLod);
-    vec3 mu = st.a > 0.004
-      ? vec3(st.r / st.a * 100.0, st.g / st.a * 255.0 - 128.0, st.b / st.a * 255.0 - 128.0)
-      : rgb2lab(clamp(orig - s, 0.0, 1.0));
+    vec3 mu = regionMeanLab(rgb2lab(clamp(orig - s, 0.0, 1.0)));
+    m *= skinWeight(rgb2lab(clamp(base - s, 0.0, 1.0)).x, mu.x);
     vec3 muLin = max(srgbToLinear3(lab2rgb(mu)), vec3(0.02));
     vec3 ratio = clamp(u_productLin / muLin, 0.0, 2.5);
     vec3 dLin = srgbToLinear3(clamp(base - s, 0.0, 1.0)) * pow(ratio, vec3(u_density));
@@ -152,7 +170,7 @@ void main() {
     float spec = clamp((1.0 - pow(1.0 - s, gamma)) * u_specScale, 0.0, 1.0);
     vec3 specColor = mix(vec3(1.0), mix(u_color, vec3(1.0), 0.3), u_specTint);
     vec3 res = 1.0 - (1.0 - linearToSrgb3(dLin)) * (1.0 - spec * specColor);
-    if (u_sparkle > 0.0) res += u_sparkle * sparkleAt(spec) * mix(vec3(1.0), specColor, 0.5);
+    if (u_sparkle > 0.0) res += u_sparkle * sparkleAt(spec, origL) * mix(vec3(1.0), specColor, 0.5);
     o = vec4(mix(base, clamp(res, 0.0, 1.0), m), 1.0);
     return;
   }
@@ -170,7 +188,7 @@ void main() {
   float spec = smoothstep(0.02, 0.16, hp) * smoothstep(0.3, 0.75, origL);
   res += u_gloss * spec;
   if (u_metal > 0.0) res = mix(res, res * (0.55 + 1.1 * origL), u_metal);
-  if (u_sparkle > 0.0) res += u_sparkle * sparkleAt(spec);
+  if (u_sparkle > 0.0) res += u_sparkle * sparkleAt(spec, origL);
 
   o = vec4(mix(base, clamp(res, 0.0, 1.0), m), 1.0);
 }

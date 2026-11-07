@@ -48,6 +48,8 @@ export interface LayerParams {
   glow: number;
   sparkle: number;
   sparkleDensity: number;
+  /** 0–1: apply only to skin (less on beard/hair). */
+  skinOnly: number;
 }
 
 interface FinishShine {
@@ -64,8 +66,8 @@ export const FACE_FINISH_PARAMS: Record<FaceFinish, FinishShine> = {
   natural: { roughness: 0.35, specScale: 0.9, specTint: 0, sparkle: 0, sparkleDensity: 260 },
   satin: { roughness: 0.28, specScale: 1, specTint: 0, sparkle: 0, sparkleDensity: 260 },
   dewy: { roughness: 0.2, specScale: 1.15, specTint: 0, sparkle: 0, sparkleDensity: 260 },
-  shimmer: { roughness: 0.25, specScale: 1.05, specTint: 0.2, sparkle: 0.35, sparkleDensity: 300 },
-  metallic: { roughness: 0.18, specScale: 1.15, specTint: 0.7, sparkle: 0.15, sparkleDensity: 340 },
+  shimmer: { roughness: 0.25, specScale: 1.05, specTint: 0.2, sparkle: 0.12, sparkleDensity: 300 },
+  metallic: { roughness: 0.18, specScale: 1.15, specTint: 0.7, sparkle: 0.06, sparkleDensity: 340 },
 };
 
 export type FaceRecipe =
@@ -81,6 +83,8 @@ export type FaceRecipe =
       featherInset: number;
       defaultFinish: FaceFinish;
       finishes: readonly FaceFinish[];
+      /** Cut these out with a crisp edge after feathering (e.g. the eyes). */
+      erase?: RegionId[];
     }
   | {
       technique: 'layer';
@@ -91,6 +95,7 @@ export type FaceRecipe =
       featherInset: number;
       defaultFinish: FaceFinish;
       finishes: readonly FaceFinish[];
+      erase?: RegionId[];
     };
 
 const SKIN_FINISHES = ['matte', 'natural', 'dewy'] as const;
@@ -100,7 +105,7 @@ export const FACE_RECIPES: Record<Exclude<FaceCategory, 'eyeshadow'>, FaceRecipe
   foundation: {
     technique: 'pigment',
     regions: ['faceSkin'],
-    shift: 0.6,
+    shift: 0.5,
     kL: 1,
     kC: 0.5,
     // ~35% fine-detail reduction: fills fine lines without the "plastic" look.
@@ -114,7 +119,7 @@ export const FACE_RECIPES: Record<Exclude<FaceCategory, 'eyeshadow'>, FaceRecipe
   'skin-tint': {
     technique: 'pigment',
     regions: ['faceSkin'],
-    shift: 0.3,
+    shift: 0.25,
     kL: 1,
     kC: 0.8,
     smooth: 0.15,
@@ -127,23 +132,26 @@ export const FACE_RECIPES: Record<Exclude<FaceCategory, 'eyeshadow'>, FaceRecipe
   concealer: {
     technique: 'pigment',
     regions: ['underEye.R', 'underEye.L'],
-    shift: 0.75,
-    kL: 0.9,
-    kC: 0.4,
-    smooth: 0.45,
-    feather: 0.03,
+    // Blended-out coverage: brightens/neutralises without a visible crescent.
+    shift: 0.55,
+    kL: 0.95,
+    kC: 0.5,
+    smooth: 0.3,
+    feather: 0.05,
     featherInset: 0,
+    erase: ['eye.R', 'eye.L'],
     defaultFinish: 'natural',
     finishes: SKIN_FINISHES,
   },
   // Sheer wash on the cheek apples with a wide soft falloff — the "natural flush".
   blush: {
     technique: 'layer',
-    regions: ['cheek.R', 'cheek.L'],
-    // Natural flush: ~+12 a* at the cheek apple at full intensity, fading to 0.
-    density: 0.32,
+    // Default placement; the product's `style` picks another (BLUSH_STYLES).
+    regions: ['blushLifted.R', 'blushLifted.L'],
+    // Natural flush: about +10 a* at the densest point, fading smoothly to 0.
+    density: 0.3,
     glow: 0,
-    feather: 0.1,
+    feather: 0.085,
     featherInset: 0,
     defaultFinish: 'satin',
     finishes: ['matte', 'satin', 'shimmer'],
@@ -158,7 +166,7 @@ export const FACE_RECIPES: Record<Exclude<FaceCategory, 'eyeshadow'>, FaceRecipe
       'cheek.R',
       'cheek.L',
     ],
-    density: 0.3,
+    density: 0.2,
     glow: 0,
     feather: 0.09,
     featherInset: 0,
@@ -175,9 +183,10 @@ export const FACE_RECIPES: Record<Exclude<FaceCategory, 'eyeshadow'>, FaceRecipe
       'contourNose.R',
       'contourNose.L',
     ],
-    density: 0.38,
+    // A soft shadow, not a stripe: a few L* darker.
+    density: 0.22,
     glow: 0,
-    feather: 0.05,
+    feather: 0.065,
     featherInset: 0,
     defaultFinish: 'matte',
     finishes: ['matte'],
@@ -193,24 +202,41 @@ export const FACE_RECIPES: Record<Exclude<FaceCategory, 'eyeshadow'>, FaceRecipe
       'highlightBrowBone.R',
       'highlightBrowBone.L',
     ],
+    // Mostly extra shine where light already hits (finish roughness), plus a little light.
     density: 0,
-    glow: 0.2,
-    feather: 0.055,
+    glow: 0.07,
+    feather: 0.06,
     featherInset: 0,
     defaultFinish: 'shimmer',
     finishes: ['satin', 'shimmer', 'metallic'],
   },
 };
 
+/** How blush is worn. */
+export const BLUSH_STYLES = {
+  lifted: ['blushLifted.R', 'blushLifted.L'],
+  draped: ['blushDraped.R', 'blushDraped.L'],
+  sunkissed: ['blushSunkissed'],
+  apples: ['blushApples.R', 'blushApples.L'],
+} as const satisfies Record<string, readonly RegionId[]>;
+export type BlushStyle = keyof typeof BLUSH_STYLES;
+export const BLUSH_STYLE_NAMES = Object.keys(BLUSH_STYLES) as BlushStyle[];
+
 /** Eyeshadow is placed in up to three tones: lid (strongest), crease (blended), outer V. */
 export const EYESHADOW_RECIPE = {
-  lid: { regions: ['eyelidLid.R', 'eyelidLid.L'] as RegionId[], density: 0.62, feather: 0.018 },
+  // Soft blended edges everywhere, then the eye opening is cut out → crisp at the lash line.
+  lid: { regions: ['eyelidLid.R', 'eyelidLid.L'] as RegionId[], density: 0.5, feather: 0.03 },
   crease: {
     regions: ['eyelidCrease.R', 'eyelidCrease.L'] as RegionId[],
-    density: 0.4,
-    feather: 0.03,
+    density: 0.3,
+    feather: 0.05,
   },
-  outer: { regions: ['eyelidOuter.R', 'eyelidOuter.L'] as RegionId[], density: 0.5, feather: 0.02 },
+  outer: {
+    regions: ['eyelidOuter.R', 'eyelidOuter.L'] as RegionId[],
+    density: 0.4,
+    feather: 0.035,
+  },
+  erase: ['eye.R', 'eye.L'] as RegionId[],
   /** With a single shade, the crease gets it at this fraction for a soft upward fade. */
   singleShadeCreaseScale: 0.55,
   defaultFinish: 'matte' as FaceFinish,
@@ -236,6 +262,7 @@ export function facePigmentParams(
     lightAdapt: 0,
     shift: r.shift * intensity,
     smooth: r.smooth * intensity,
+    skinOnly: 1,
   };
 }
 
@@ -254,6 +281,7 @@ export function layerParams(
     glow: glow * intensity,
     sparkle: f.sparkle * intensity,
     sparkleDensity: f.sparkleDensity,
+    skinOnly: 0.8,
   };
 }
 

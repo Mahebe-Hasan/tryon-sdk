@@ -8,6 +8,7 @@ import statsFrag from './shaders/stats.frag.glsl?raw';
 import { withIncludes } from './blend';
 import { blendModeIndex, linearToSrgb, rgbToLab, srgbToLinear, type RGB } from './color';
 import { shapeBBox, shapeTriangles, unionBBox } from './mask';
+import type { RegionShape } from '../tracking/regions';
 import {
   FINISH_PRESETS,
   RENDER_CONFIG,
@@ -43,12 +44,15 @@ export class WebGLRenderer implements Renderer {
   private w = 0;
   private h = 0;
   private hasFrame = false;
+  /** Render region statistics in half-float (EXT_color_buffer_float). */
+  private floatStats: boolean;
   private mw = 0;
   private mh = 0;
 
   private constructor(canvas: HTMLCanvasElement, gl: WebGL2RenderingContext) {
     this.canvas = canvas;
     this.gl = gl;
+    this.floatStats = gl.getExtension('EXT_color_buffer_float') !== null;
     this.progs = {
       mask: new Program(gl, maskVert, maskFrag),
       blur: new Program(gl, quadVert, blurFrag),
@@ -134,6 +138,7 @@ export class WebGLRenderer implements Renderer {
       if (fx.opacity <= 0.003 || fx.shapes.length === 0) continue;
       if (!this.drawMask(fx)) continue;
       this.featherMask(fx.featherPx);
+      if (fx.erase?.length) this.eraseMask(fx.erase);
       this.measureRegion(detailLod);
       const target = this.frames[ping] as Target;
       this.composite(fx, src, target, frame, detailLod);
@@ -230,6 +235,22 @@ export class WebGLRenderer implements Renderer {
     this.drawQuad();
   }
 
+  /** Zero the mask inside `shapes` (after feathering, so the cut edge stays crisp). */
+  private eraseMask(shapes: RegionShape[]): void {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, (this.mask as Target).fb);
+    gl.viewport(0, 0, this.mw, this.mh);
+    const p = this.progs.mask.use();
+    gl.uniform2f(p.loc('u_size'), this.w, this.h);
+    gl.enable(gl.BLEND);
+    gl.blendEquation(gl.FUNC_ADD);
+    gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_COLOR); // dst × (1 − 1) = 0 where drawn
+    const tris: number[] = [];
+    for (const s of shapes) for (const v of shapeTriangles(s).fill) tris.push(v);
+    if (tris.length) this.drawTriangles(tris);
+    gl.disable(gl.BLEND);
+  }
+
   /** Mask-weighted diffuse Lab into the stats target, then mipmap it (see stats.frag.glsl). */
   private measureRegion(detailLod: number): void {
     const gl = this.gl;
@@ -302,6 +323,21 @@ export class WebGLRenderer implements Renderer {
     gl.uniform1f(p.loc('u_specGain'), RENDER_CONFIG.specGain);
     gl.uniform2f(p.loc('u_regionCenter'), cx / this.w, cy / this.h);
     gl.uniform1f(p.loc('u_regionLod'), regionLod);
+    // Per-shape stats samples: each shape's own centre at a mip ≈ its own size, so two far
+    // apart cheeks or eyes are each averaged properly (summed, then divided by mask weight).
+    const pts = new Float32Array(3 * MAX_STAT_PTS);
+    let n = 0;
+    for (const shape of fx.shapes) {
+      const b = shapeBBox(shape);
+      if (!b || n >= MAX_STAT_PTS) continue;
+      const s = Math.max(b.maxX - b.minX, b.maxY - b.minY) * RENDER_CONFIG.maskScale;
+      pts[n * 3] = (b.minX + b.maxX) / 2 / this.w;
+      pts[n * 3 + 1] = (b.minY + b.maxY) / 2 / this.h;
+      pts[n * 3 + 2] = clamp(Math.log2(Math.max(1, s)), 0, maskMaxLod);
+      n++;
+    }
+    gl.uniform3fv(p.loc('u_statPts'), pts);
+    gl.uniform1i(p.loc('u_statN'), n);
     gl.uniform1f(p.loc('u_detailLod'), detailLod);
     gl.uniform1f(p.loc('u_detail'), RENDER_CONFIG.detailByMode[fx.blend]);
     gl.uniform1f(p.loc('u_matte'), f.matte);
@@ -316,6 +352,7 @@ export class WebGLRenderer implements Renderer {
     if (ly) {
       gl.uniform3f(p.loc('u_productLin'), litLin[0], litLin[1], litLin[2]);
       gl.uniform1f(p.loc('u_density'), ly.density);
+      gl.uniform1f(p.loc('u_skinOnly'), ly.skinOnly);
       gl.uniform1f(p.loc('u_glow'), ly.glow);
       gl.uniform1f(p.loc('u_roughness'), ly.roughness);
       gl.uniform1f(p.loc('u_specScale'), ly.specScale);
@@ -328,6 +365,7 @@ export class WebGLRenderer implements Renderer {
       gl.uniform1f(p.loc('u_kC'), pg.kC);
       gl.uniform1f(p.loc('u_shift'), pg.shift);
       gl.uniform1f(p.loc('u_smooth'), pg.smooth);
+      gl.uniform1f(p.loc('u_skinOnly'), pg.skinOnly);
       gl.uniform1f(p.loc('u_roughness'), pg.roughness);
       gl.uniform1f(p.loc('u_specScale'), pg.specScale);
       gl.uniform1f(p.loc('u_specTint'), pg.specTint);
@@ -385,7 +423,26 @@ export class WebGLRenderer implements Renderer {
     ];
     this.mask = new Target(gl, this.mw, this.mh, gl.R8, gl.RED, true);
     this.blur = new Target(gl, this.mw, this.mh, gl.R8, gl.RED, false);
-    this.stats = new Target(gl, this.mw, this.mh, gl.RGBA8, gl.RGBA, false, true);
+    // Half-float stats when supported: 8-bit sums lose most precision for small or split
+    // regions (thin under-eye crescents, two cheeks), which corrupted the mean colour.
+    this.stats = null;
+    if (this.floatStats) {
+      try {
+        this.stats = new Target(
+          gl,
+          this.mw,
+          this.mh,
+          gl.RGBA16F,
+          gl.RGBA,
+          false,
+          true,
+          gl.HALF_FLOAT,
+        );
+      } catch {
+        this.floatStats = false; // advertised but not renderable on this GPU
+      }
+    }
+    this.stats ??= new Target(gl, this.mw, this.mh, gl.RGBA8, gl.RGBA, false, true);
   }
 }
 
@@ -433,10 +490,11 @@ class Target {
     format: number,
     withStencil: boolean,
     mipmapped = false,
+    type: number = gl.UNSIGNED_BYTE,
   ) {
     this.tex = must(gl.createTexture(), 'texture');
     gl.bindTexture(gl.TEXTURE_2D, this.tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, format, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, format, type, null);
     gl.texParameteri(
       gl.TEXTURE_2D,
       gl.TEXTURE_MIN_FILTER,
@@ -499,6 +557,9 @@ function must<T>(v: T | null, what: string): T {
   if (v === null) throw new Error(`WebGL: could not create ${what}`);
   return v;
 }
+
+/** Max shapes sampled for region statistics (must match composite.frag.glsl). */
+const MAX_STAT_PTS = 8;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));

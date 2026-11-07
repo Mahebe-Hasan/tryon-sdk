@@ -1,5 +1,7 @@
 import {
+  BLUSH_STYLE_NAMES,
   finishesFor,
+  type BlushStyle,
   type FaceView,
   type Product,
   type ProductCategory,
@@ -140,6 +142,7 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
   let showMakeup = true;
   const finishByCat = new Map<ProductCategory, ProductFinish>();
   const intensityByCat = new Map<ProductCategory, number>();
+  let blushStyle: BlushStyle = 'lifted';
 
   host.innerHTML = '';
   const title = document.createElement('h2');
@@ -155,12 +158,13 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
   shadeName.className = 'shade-name';
   host.append(title, grid, swatches, shadeName, applied);
 
-  const field = (label: string, input: HTMLElement): void => {
+  const field = (label: string, input: HTMLElement): HTMLLabelElement => {
     const l = document.createElement('label');
     const span = document.createElement('span');
     span.textContent = label;
     l.append(span, input);
     grid.append(l);
+    return l;
   };
 
   const categorySel = document.createElement('select');
@@ -187,6 +191,20 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
 
   field('Product', categorySel);
   field('Finish', finishSel);
+  const styleSel = document.createElement('select');
+  const STYLE_LABELS: Record<BlushStyle, string> = {
+    lifted: 'Lifted (to temples)',
+    draped: 'Draped (cheekbone)',
+    sunkissed: 'Sun-kissed (over nose)',
+    apples: 'Apples (round)',
+  };
+  for (const st of BLUSH_STYLE_NAMES) {
+    const o = document.createElement('option');
+    o.value = st;
+    o.textContent = STYLE_LABELS[st];
+    styleSel.append(o);
+  }
+  const styleField = field('Style', styleSel);
   field('Intensity', intensity);
   field('Before / after', toggle);
 
@@ -209,6 +227,7 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
       shadeName: s.name,
       finish: finishByCat.get(category) ?? (finishesFor(category)[0] as ProductFinish),
       intensity: intensityByCat.get(category) ?? 1,
+      ...(category === 'blush' && { style: blushStyle }),
     });
     showMakeup = true;
     syncPanel();
@@ -220,6 +239,7 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
     if (!p) return;
     p.finish = finishByCat.get(category) ?? p.finish;
     p.intensity = intensityByCat.get(category) ?? p.intensity;
+    if (category === 'blush') p.style = blushStyle;
     apply();
   };
 
@@ -234,6 +254,8 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
     }
     finishSel.value = finishByCat.get(category) ?? (finishesFor(category)[0] as ProductFinish);
     intensity.value = String(intensityByCat.get(category) ?? 1);
+    styleField.hidden = category !== 'blush';
+    styleSel.value = blushStyle;
     const cur = current();
     swatches.innerHTML = '';
     swatches.setAttribute('aria-label', `${LABELS[category]} shade`);
@@ -281,6 +303,10 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
   });
   finishSel.addEventListener('change', () => {
     finishByCat.set(category, finishSel.value as ProductFinish);
+    updateCurrent();
+  });
+  styleSel.addEventListener('change', () => {
+    blushStyle = styleSel.value as BlushStyle;
     updateCurrent();
   });
   intensity.addEventListener('input', () => {

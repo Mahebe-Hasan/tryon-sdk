@@ -98,6 +98,8 @@ export interface RenderEffect {
    * axis, and the unit lip axis. Lips only; omitted = no synthetic highlight.
    */
   glossSpot?: { x: number; y: number; rx: number; ry: number; ax: number; ay: number };
+  /** Shapes cut out of the mask AFTER feathering (crisp edge), e.g. the eye opening. */
+  erase?: RegionShape[];
 }
 
 export interface FrameInfo {

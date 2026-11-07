@@ -144,6 +144,14 @@ crease 0.30–0.72, and the outer third up to 0.60 (`REGION_CONFIG.eyeshadow`). 
 gives lid + a softer crease; `tones` gives lid / crease / outer like a palette (Perfect Corp
 allows up to 5 eyeshadow colours).
 
+**Realism fixes after phone testing (0.0.9):**
+
+- **Region mean precision.** 8-bit mip sums corrupt the mean colour of small or split regions, which made concealer olive. Stats now use half-float and per-shape sampling.
+- **Skin only.** Product fades out on pixels more than 16–32 L* darker than the region's skin mean (beard, stubble, nostrils). Ordinary facial shading stays within that margin.
+- **Eye cut-out.** Eyeshadow and concealer are cut out of the eye opening after feathering, so the lash line is crisp and the eyes are untouched.
+- **Blush placement styles.** Lifted (apple → temple), draped (cheekbone → temple → outer brow), sun-kissed (cheeks + nose bridge) and apples. These are the common ways blush is worn; a round dot alone looks fake.
+- **Lower densities** for contour, bronzer, eyeshadow and highlighter. Shimmer only glints where light falls.
+
 **Application order** (build plan §5.4): foundation → skin tint → concealer → contour →
 bronzer → blush → highlighter → eyeshadow → lip liner → lip colour → gloss.
 

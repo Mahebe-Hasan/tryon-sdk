@@ -105,7 +105,7 @@ describe('productEffects / looks', () => {
     expect(f?.regions).toEqual(['faceSkin']);
     const [b] = productEffects({ id: 'b', category: 'blush', color: '#e07a8f' });
     expect(b?.blend).toBe('layer');
-    expect(b?.regions).toEqual(['cheek.R', 'cheek.L']);
+    expect(b?.regions).toEqual(['blushLifted.R', 'blushLifted.L']); // default style
   });
 
   it('single-shade eyeshadow fills lid and a softer crease; tones give up to three zones', () => {
@@ -156,6 +156,54 @@ describe('eyeshadow regions', () => {
     for (const z of ['eyelidLid', 'eyelidCrease', 'eyelidOuter']) {
       expect(ids.has(`${z}.R` as never)).toBe(true);
       expect(ids.has(`${z}.L` as never)).toBe(true);
+    }
+  });
+});
+
+describe('realism fixes', () => {
+  it('blush styles change placement (lifted, draped, sun-kissed, apples)', () => {
+    const regions = (style: 'lifted' | 'draped' | 'sunkissed' | 'apples') =>
+      productEffects({ id: 'b', category: 'blush', color: '#e07a8f', style })[0]?.regions;
+    expect(regions('draped')).toEqual(['blushDraped.R', 'blushDraped.L']);
+    expect(regions('sunkissed')).toEqual(['blushSunkissed']);
+    expect(regions('apples')).toEqual(['blushApples.R', 'blushApples.L']);
+  });
+
+  it('eyeshadow and concealer cut the eye opening out (crisp lash line, eyes untouched)', () => {
+    for (const fx of productEffects({ id: 'e', category: 'eyeshadow', color: '#9c6a3f' })) {
+      expect(fx.erase).toEqual(['eye.R', 'eye.L']);
+    }
+    expect(productEffects({ id: 'c', category: 'concealer', color: '#f3d9c6' })[0]?.erase).toEqual([
+      'eye.R',
+      'eye.L',
+    ]);
+  });
+
+  it('face products apply to skin only; lips do not use the skin filter', () => {
+    expect(
+      productEffects({ id: 'f', category: 'foundation', color: '#d9ae8c' })[0]?.pigment?.skinOnly,
+    ).toBe(1);
+    expect(
+      productEffects({ id: 'l', category: 'lipstick', color: '#9b1b30' })[0]?.pigment?.skinOnly,
+    ).toBe(0);
+  });
+
+  it('blush regions exist for both sides plus sun-kissed', () => {
+    const landmarks = Array.from({ length: 478 }, (_, i) => ({
+      x: (i % 22) / 22,
+      y: Math.floor(i / 22) / 22,
+      z: 0,
+    }));
+    const ids = new Set(computeRegions(landmarks, 640, 480).map((r) => r.id));
+    for (const id of [
+      'blushLifted.R',
+      'blushDraped.L',
+      'blushApples.R',
+      'blushSunkissed',
+      'eye.R',
+      'eye.L',
+    ]) {
+      expect(ids.has(id as never)).toBe(true);
     }
   });
 });

@@ -8,7 +8,9 @@ import {
   type LipFinish,
 } from '../render/recipes';
 import {
+  BLUSH_STYLES,
   EYESHADOW_RECIPE,
+  type BlushStyle,
   FACE_CATEGORIES,
   FACE_RECIPES,
   facePigmentParams,
@@ -31,6 +33,8 @@ export interface Product {
   finish?: ProductFinish;
   /** 0–1 shopper intensity slider (how heavily it is applied). Default 1. */
   intensity?: number;
+  /** Blush only: how it is worn (lifted, draped, sunkissed, apples). Default lifted. */
+  style?: BlushStyle;
   /** Eyeshadow only: up to three tones. Without it, `color` goes on lid + a softer crease. */
   tones?: { lid?: string; crease?: string; outer?: string };
 }
@@ -128,6 +132,7 @@ export function productEffects(p: Product): EffectSpec[] {
         feather: e[zone].feather,
         featherInset: 0,
         layer: layerParams(density, 0, ff, intensity),
+        erase: e.erase,
       }));
   }
 
@@ -144,13 +149,17 @@ export function productEffects(p: Product): EffectSpec[] {
         feather: r.feather,
         featherInset: r.featherInset,
         pigment: facePigmentParams(r, ff, intensity),
+        ...(r.erase && { erase: r.erase }),
       },
     ];
   }
   return [
     {
       id: p.id,
-      regions: r.regions,
+      regions:
+        p.category === 'blush' && p.style && p.style in BLUSH_STYLES
+          ? [...BLUSH_STYLES[p.style]]
+          : r.regions,
       color: p.color,
       blend: 'layer',
       finish: 'satin',
@@ -158,6 +167,7 @@ export function productEffects(p: Product): EffectSpec[] {
       feather: r.feather,
       featherInset: r.featherInset,
       layer: layerParams(r.density, r.glow, ff, intensity),
+      ...(r.erase && { erase: r.erase }),
     },
   ];
 }

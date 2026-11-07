@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.0.9] — 2026-11-08 — Face makeup realism fixes (from phone testing)
+
+- **Fixed: muddy/olive concealer (and wrong colours on small regions).** The region's mean
+  skin colour was stored in 8-bit textures; for small or split regions (two under-eye
+  crescents, two cheeks, eyelids) most precision was lost and the colour channels became
+  garbage. Stats now use half-float textures (with an 8-bit fallback) and are sampled per
+  shape. Synthetic check: concealer now brightens the under-eye L* 50.5 → 67.9 toward the
+  shade with neutral colour, identically on both eyes.
+- **Foundation, skin tint and concealer apply to skin only.** Pixels far darker than the skin
+  (beard, stubble, nostrils, hair) get progressively less product. Check: beard hairs ΔE 0,
+  shadowed skin still fully covered (ΔE 11.8 vs 11.2 on normal skin). Coverage lowered
+  slightly (foundation 0.5, tint 0.25, concealer 0.55, softer edges).
+- **Eyes stay clean.** Eyeshadow and concealer feather softly, then the eye opening is cut out
+  with a crisp edge. Blended upward and crisp at the lash line; eye whites and iris unchanged.
+- **Blush styles** (`Product.style`): lifted (apple → temple, default), draped (cheekbone →
+  temple → outer brow), sun-kissed (across cheeks and nose bridge), apples (soft oval).
+  Replaces the blurred circle.
+- **Less fake, less strong:** contour is a soft shadow (density 0.38 → 0.22), bronzer 0.3 → 0.2,
+  eyeshadow lid 0.62 → 0.5 / crease 0.4 → 0.3, highlighter is mostly finish shine
+  (glow 0.2 → 0.07), and shimmer particles are fainter and only glint where light falls.
+- Demo: Style picker for blush.
+
 ## [0.0.8] — 2026-11-08 — Phase 4: Face makeup + eyeshadow
 
 Foundation, skin tint, concealer, blush, bronzer, contour, highlighter and eyeshadow, built

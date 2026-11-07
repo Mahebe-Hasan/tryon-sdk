@@ -53,6 +53,8 @@ export interface EffectSpec {
   layer?: LayerParams;
   /** Add the synthetic lower-lip wet highlight (lip products). */
   lipHighlight?: boolean;
+  /** Regions cut out of this effect with a crisp edge (e.g. eyes for eyeshadow/concealer). */
+  erase?: RegionId[];
 }
 
 export interface FaceViewEvents extends Record<string, unknown> {
@@ -413,6 +415,12 @@ export class FaceView {
       ...(fx.pigment && { pigment: fx.pigment }),
       ...(fx.layer && { layer: fx.layer }),
       ...(fx.lipHighlight && { glossSpot: lipGlossSpot(lm, w, h) }),
+      ...(fx.erase && {
+        erase: fx.erase.flatMap((id) => {
+          const r = byId.get(id);
+          return r ? [r.shape] : [];
+        }),
+      }),
     }));
   }
 }

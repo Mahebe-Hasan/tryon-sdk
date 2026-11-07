@@ -66,7 +66,18 @@ export type RegionId =
   | 'brow.R'
   | 'brow.L'
   | 'iris.R'
-  | 'iris.L';
+  | 'iris.L'
+  /** Eye opening (slightly enlarged) — used to cut makeup out of the eye itself. */
+  | 'eye.R'
+  | 'eye.L'
+  /** Blush placements (how blush is actually worn — see BLUSH_STYLES). */
+  | 'blushApples.R'
+  | 'blushApples.L'
+  | 'blushLifted.R'
+  | 'blushLifted.L'
+  | 'blushDraped.R'
+  | 'blushDraped.L'
+  | 'blushSunkissed';
 
 export type RegionGroup = 'lips' | 'skin' | 'cheeks' | 'contour' | 'highlight' | 'eyes' | 'brows';
 
@@ -94,6 +105,18 @@ export const REGION_CONFIG = {
   cupidsBowT: 0.35,
   /** Extra curve points per lip-outline segment (0 = MediaPipe's straight segments). */
   lipCurveSubdivisions: 3,
+  /** Blush shapes (× face width). Strokes are blurred heavily by the recipe → soft gradients. */
+  blush: {
+    applesRx: 0.075,
+    applesRy: 0.055,
+    liftedWidth: 0.065,
+    drapedWidth: 0.05,
+    sunkissedWidth: 0.035,
+    /** Pull the temple point toward the outer eye corner (keeps blush off the hairline). */
+    templeInset: 0.2,
+  },
+  /** Eye opening cut-out size (1 = exact lid line; slightly larger also cuts lash roots). */
+  eyeCutoutScale: 1.06,
   /**
    * Eyeshadow zones as fractions of the way from the lash line (0) to the brow (1):
    * lid = 0…lidTop, crease band = creaseBottom…creaseTop, outer V = outer third up to outerTop.
@@ -133,6 +156,9 @@ const IDX = {
     /** Upper-lid crease ring, paired with browLower[0..3] for the brow bone. */
     creaseRing: [225, 224, 223, 222],
     cheekCenter: [50, 123],
+    /** Side of the face at eye level (face oval) — the temple end of lifted/draped blush. */
+    templeSide: [127, 162],
+    browOuter: 46,
     contourCheek: [93, 137, 147, 187],
     contourJaw: [132, 58, 172, 136, 150, 149, 176],
     contourNose: [193, 122, 196, 3, 51],
@@ -149,6 +175,8 @@ const IDX = {
     browLower: [276, 283, 282, 295, 285],
     creaseRing: [445, 444, 443, 442],
     cheekCenter: [280, 352],
+    templeSide: [356, 389],
+    browOuter: 276,
     contourCheek: [323, 366, 376, 411],
     contourJaw: [361, 288, 397, 365, 379, 378, 400],
     contourNose: [417, 351, 419, 248, 281],
@@ -206,6 +234,9 @@ export function computeRegions(
   const pts = (idx: readonly number[]): Vec2[] => idx.map(P);
   const faceW = dist(P(IDX.faceSideR), P(IDX.faceSideL));
   const up = normalize(sub(P(IDX.faceTop), P(IDX.chin)));
+  const across = normalize(sub(P(IDX.faceSideL), P(IDX.faceSideR)));
+  const bl = cfg.blush;
+  const apple = (side: 'R' | 'L'): Vec2 => centroid(pts(IDX[side].cheekCenter));
 
   const lipLoops = LIP_LOOPS.map((l) => smoothClosed(pts(l), cfg.lipCurveSubdivisions)).sort(
     (a, b) => Math.abs(polygonArea(b)) - Math.abs(polygonArea(a)),
@@ -250,6 +281,23 @@ export function computeRegions(
     },
   ];
 
+  // Sun-kissed: across both cheeks and lightly over the nose bridge (thin there → fainter).
+  regions.push({
+    id: 'blushSunkissed',
+    group: 'cheeks',
+    shape: {
+      kind: 'polyline',
+      points: [
+        apple('R'),
+        lerp(apple('R'), P(197), 0.6),
+        P(197),
+        lerp(apple('L'), P(197), 0.6),
+        apple('L'),
+      ],
+      width: faceW * bl.sunkissedWidth,
+    },
+  });
+
   for (const side of ['R', 'L'] as const) {
     const s = IDX[side];
     const eye = side === 'R' ? eyeR : eyeL;
@@ -275,7 +323,37 @@ export function computeRegions(
     const crease = pts(s.creaseRing);
     const browBone = crease.map((c, i) => lerp(browLower[i] ?? c, c, cfg.browBoneT));
 
+    const ap = apple(side);
+    const temple = lerp(centroid(pts(s.templeSide)), outer, bl.templeInset);
     regions.push(
+      {
+        id: `blushApples.${side}`,
+        group: 'cheeks',
+        shape: {
+          kind: 'polygon',
+          loops: [ellipse(ap, across, up, faceW * bl.applesRx, faceW * bl.applesRy)],
+        },
+      },
+      {
+        // Most common modern placement: apple → up along the cheekbone toward the temple.
+        id: `blushLifted.${side}`,
+        group: 'cheeks',
+        shape: {
+          kind: 'polyline',
+          points: [ap, lerp(ap, temple, 0.5), lerp(ap, temple, 0.88)],
+          width: faceW * bl.liftedWidth,
+        },
+      },
+      {
+        // Draping: high on the cheekbone, around the temple toward the outer brow.
+        id: `blushDraped.${side}`,
+        group: 'cheeks',
+        shape: {
+          kind: 'polyline',
+          points: [lerp(ap, temple, 0.35), temple, lerp(temple, P(s.browOuter), 0.55)],
+          width: faceW * bl.drapedWidth,
+        },
+      },
       {
         id: `underEye.${side}`,
         group: 'skin',
@@ -373,9 +451,27 @@ export function computeRegions(
         group: 'eyes',
         shape: { kind: 'circle', center: irisCenter, radius: irisRadius, clip: eye },
       },
+      {
+        id: `eye.${side}`,
+        group: 'eyes',
+        shape: { kind: 'polygon', loops: [scaleAbout(eye, centroid(eye), cfg.eyeCutoutScale)] },
+      },
     );
   }
   return regions;
+}
+
+function ellipse(c: Vec2, ax: Vec2, ay: Vec2, rx: number, ry: number, n = 28): Vec2[] {
+  return Array.from({ length: n }, (_, i) => {
+    const t = (i / n) * Math.PI * 2;
+    const u = Math.cos(t) * rx;
+    const v = Math.sin(t) * ry;
+    return { x: c.x + ax.x * u + ay.x * v, y: c.y + ax.y * u + ay.y * v };
+  });
+}
+
+function scaleAbout(pts: readonly Vec2[], c: Vec2, k: number): Vec2[] {
+  return pts.map((p) => ({ x: c.x + (p.x - c.x) * k, y: c.y + (p.y - c.y) * k }));
 }
 
 /** Resample a polyline to n points evenly spaced by arc length. */
