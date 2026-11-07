@@ -248,6 +248,34 @@ h1 {
   background: transparent;
 }
 
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 4px 0 6px;
+}
+
+.swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 0.35);
+  cursor: pointer;
+  padding: 0;
+}
+
+.swatch[aria-checked='true'] {
+  border-color: var(--fg);
+  transform: scale(1.08);
+}
+
+.shade-name {
+  margin: 0 0 10px;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
 .renderer {
   margin: 8px 0 0;
   font-size: 0.8125rem;

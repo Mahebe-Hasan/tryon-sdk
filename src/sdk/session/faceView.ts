@@ -6,8 +6,10 @@ import { createRenderer, type RendererPreference } from '../render/index';
 import { Canvas2DRenderer } from '../render/fallback2d';
 import { hexToRgb, type BlendMode, type RGB } from '../render/color';
 import type { Finish, RenderEffect, Renderer } from '../render/types';
+import type { PigmentParams } from '../render/recipes';
+import { lipProductEffect, type LipProduct } from './products';
 import { FaceTracker } from '../tracking/face';
-import { faceMetrics } from '../tracking/metrics';
+import { faceMetrics, lipGlossSpot } from '../tracking/metrics';
 import { Presence } from '../tracking/presence';
 import { computeRegions, type Region, type RegionId } from '../tracking/regions';
 import { LandmarkSmoother, type OneEuroParams, type Point3 } from '../tracking/smoothing';
@@ -43,6 +45,10 @@ export interface EffectSpec {
   feather: number;
   /** 0 = soft edge centred on the outline, 1 = soft edge fully inside (no bleed). */
   featherInset?: number;
+  /** Pigment technique parameters (lip products; set by `lipProductEffect`). */
+  pigment?: PigmentParams;
+  /** Add the synthetic lower-lip wet highlight (lip products). */
+  lipHighlight?: boolean;
 }
 
 export interface FaceViewEvents extends Record<string, unknown> {
@@ -136,9 +142,19 @@ export class FaceView {
     return this.renderer.kind;
   }
 
-  /** Replace the active effects. Throws on an invalid colour. */
+  /** Replace the active effects. Throws on an invalid colour or missing pigment params. */
   setEffects(specs: EffectSpec[]): void {
+    for (const s of specs) {
+      if (s.blend === 'pigment' && !s.pigment) {
+        throw new Error(`Effect "${s.id}": blend 'pigment' needs pigment params`);
+      }
+    }
     this.effects = specs.map(({ color, ...rest }) => ({ ...rest, rgb: hexToRgb(color) }));
+  }
+
+  /** Apply lip products (category + shade + finish); rendering follows the product recipes. */
+  setLipProducts(products: LipProduct[]): void {
+    this.setEffects(products.map(lipProductEffect));
   }
 
   /** Start camera and tracking. Resolves with the final camera state. */
@@ -307,7 +323,8 @@ export class FaceView {
     const regions = needRegions ? computeRegions(lm, w, h) : [];
     const metrics = lm ? faceMetrics(lm, w, h) : null;
 
-    const renderEffects = metrics ? this.buildEffects(regions, metrics.width, opacity) : [];
+    const renderEffects =
+      metrics && lm ? this.buildEffects(regions, metrics.width, opacity, lm, w, h) : [];
     if (this.renderer.canvas.style.visibility) this.renderer.canvas.style.visibility = '';
     this.renderer.render(renderEffects, {
       time: (now - this.t0) / 1000,
@@ -349,7 +366,14 @@ export class FaceView {
     }
   }
 
-  private buildEffects(regions: Region[], faceWidth: number, presence: number): RenderEffect[] {
+  private buildEffects(
+    regions: Region[],
+    faceWidth: number,
+    presence: number,
+    lm: readonly Point3[],
+    w: number,
+    h: number,
+  ): RenderEffect[] {
     if (presence <= 0 || this.effects.length === 0) return [];
     const byId = new Map(regions.map((r) => [r.id, r]));
     return this.effects.map((fx) => ({
@@ -364,6 +388,8 @@ export class FaceView {
       opacity: fx.opacity * presence,
       featherPx: fx.feather * faceWidth,
       featherInset: fx.featherInset ?? 0,
+      ...(fx.pigment && { pigment: fx.pigment }),
+      ...(fx.lipHighlight && { glossSpot: lipGlossSpot(lm, w, h) }),
     }));
   }
 }

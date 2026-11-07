@@ -14,11 +14,14 @@ export const BLEND_MODES = [
   'soft-light',
   'color',
   /**
-   * Makeup mode (not W3C): the product colour, modulated by each pixel's brightness relative
-   * to the region's average. The region shows the exact shade on average while keeping all of
-   * its own light, shadow and texture — so the colour looks like it is ON the lips, not over.
+   * Makeup pigment transfer (not W3C; used for lip products). The industry method from the
+   * Shiseido US10939742 patent and Amazon's LipAT (WACV 2024): split the image into diffuse
+   * colour and specular shine, shift the region's mean CIELAB colour to the product colour
+   * while keeping each pixel's deviation from that mean (texture/shading), rescale the shine
+   * by the product's roughness, then screen-blend the shine back. See `pigmentTransfer`,
+   * `lipSpecular` and docs/RENDERING_RESEARCH.md.
    */
-  'tint',
+  'pigment',
 ] as const;
 export type BlendMode = (typeof BLEND_MODES)[number];
 
@@ -55,6 +58,84 @@ export function linearToSrgb(c: number): number {
 export function hexToLinear(hex: string): RGB {
   const [r, g, b] = hexToRgb(hex);
   return [srgbToLinear(r), srgbToLinear(g), srgbToLinear(b)];
+}
+
+// ---- CIELAB (D65), matches shaders/lab.glsl --------------------------------------------
+
+export type Lab = [number, number, number];
+
+const WHITE_D65 = [0.95047, 1, 1.08883] as const;
+
+function labF(t: number): number {
+  return t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116;
+}
+function labFInv(t: number): number {
+  return t * t * t > 216 / 24389 ? t * t * t : (116 * t - 16) / (24389 / 27);
+}
+
+/** sRGB (0–1) → CIELAB (L 0–100, a/b roughly −128..127), D65 white. */
+export function rgbToLab([r, g, b]: RGB): Lab {
+  const R = srgbToLinear(r);
+  const G = srgbToLinear(g);
+  const B = srgbToLinear(b);
+  const x = (0.4124564 * R + 0.3575761 * G + 0.1804375 * B) / WHITE_D65[0];
+  const y = (0.2126729 * R + 0.7151522 * G + 0.072175 * B) / WHITE_D65[1];
+  const z = (0.0193339 * R + 0.119192 * G + 0.9503041 * B) / WHITE_D65[2];
+  const fx = labF(x);
+  const fy = labF(y);
+  const fz = labF(z);
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+
+/** CIELAB → sRGB (0–1, clamped). */
+export function labToRgb([L, a, bb]: Lab): RGB {
+  const fy = (L + 16) / 116;
+  const fx = fy + a / 500;
+  const fz = fy - bb / 200;
+  const x = labFInv(fx) * WHITE_D65[0];
+  const y = labFInv(fy) * WHITE_D65[1];
+  const z = labFInv(fz) * WHITE_D65[2];
+  const R = 3.2404542 * x - 1.5371385 * y - 0.4985314 * z;
+  const G = -0.969266 * x + 1.8760108 * y + 0.041556 * z;
+  const B = 0.0556434 * x - 0.2040259 * y + 1.0572252 * z;
+  const c = (v: number): number => Math.min(1, Math.max(0, linearToSrgb(Math.max(0, v))));
+  return [c(R), c(G), c(B)];
+}
+
+/** CIE76 colour difference. ΔE < ~2.3 is a "just noticeable difference". */
+export function deltaE76(p: Lab, q: Lab): number {
+  return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+}
+
+/**
+ * Pigment transfer for one pixel (CPU reference of the shader):
+ *   L' = L_product + kL·(L − L̄),  ab' = ab_product + kC·(ab − āb̄)
+ * where L̄/āb̄ are the region's mask-weighted mean. kL/kC ∈ [0,1] are how much of the lip's own
+ * lightness/colour variation shows through (Shiseido's α; LipAT uses 1). Full-coverage
+ * products use lower values.
+ */
+export function pigmentTransfer(
+  pixel: Lab,
+  regionMean: Lab,
+  product: Lab,
+  kL: number,
+  kC: number,
+): Lab {
+  return [
+    product[0] + kL * (pixel[0] - regionMean[0]),
+    product[1] + kC * (pixel[1] - regionMean[1]),
+    product[2] + kC * (pixel[2] - regionMean[2]),
+  ];
+}
+
+/**
+ * Specular update by product roughness (LipAT eq. 4, regressed on PBR renders):
+ *   S' = 1 − (1 − S)^γ,  γ = 2.42·e^(−1.55·roughness)
+ * roughness 0.1 = glossy (γ≈2.07, boosts shine), 0.7 = matte (γ≈0.82, damps it), bare skin ≈0.3.
+ */
+export function lipSpecular(s: number, roughness: number): number {
+  const gamma = 2.42 * Math.exp(-1.55 * roughness);
+  return 1 - Math.pow(1 - Math.min(1, Math.max(0, s)), gamma);
 }
 
 /** Rec. 601 luma on gamma-encoded values (matches the shader's lum()). */
@@ -103,18 +184,14 @@ export function colorBlend(b: RGB, s: RGB): RGB {
 }
 
 /**
- * Tint: `s × shadeRatio`, where shadeRatio = pixel luminance / mean luminance of the region
- * (computed on the GPU from the mask). Clamped to 0–1.
+ * Simple per-pixel blends. `pigment` needs region statistics, so here it degrades to the
+ * pixel-equals-region-mean case (the exact product colour); use `pigmentTransfer` for the
+ * full per-pixel behaviour.
  */
-export function tint(s: RGB, shadeRatio: number): RGB {
-  const r = Math.max(0, shadeRatio);
-  return [Math.min(1, s[0] * r), Math.min(1, s[1] * r), Math.min(1, s[2] * r)];
-}
-
-export function blend(mode: BlendMode, b: RGB, s: RGB, shadeRatio = 1): RGB {
+export function blend(mode: BlendMode, b: RGB, s: RGB): RGB {
   switch (mode) {
-    case 'tint':
-      return tint(s, shadeRatio);
+    case 'pigment':
+      return [...s];
     case 'multiply':
       return multiply(b, s);
     case 'screen':

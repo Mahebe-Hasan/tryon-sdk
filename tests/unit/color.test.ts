@@ -14,6 +14,12 @@ import {
   screen,
   softLight,
   srgbToLinear,
+  rgbToLab,
+  labToRgb,
+  deltaE76,
+  pigmentTransfer,
+  lipSpecular,
+  type Lab,
   type RGB,
 } from '../../src/sdk/render/color';
 import { BLEND_GLSL } from '../../src/sdk/render/blend';
@@ -129,19 +135,79 @@ describe('GLSL blend library stays in sync', () => {
   });
 });
 
-describe('tint (makeup mode)', () => {
-  it('shows the exact shade where the pixel matches the region mean', () => {
-    close(blend('tint', [0.3, 0.3, 0.3], [0.6, 0.1, 0.2], 1), [0.6, 0.1, 0.2]);
+describe('CIELAB (D65)', () => {
+  it('matches reference values', () => {
+    const white = rgbToLab([1, 1, 1]);
+    expect(white[0]).toBeCloseTo(100, 2);
+    expect(Math.abs(white[1])).toBeLessThan(0.01);
+    expect(Math.abs(white[2])).toBeLessThan(0.01);
+    // sRGB pure red ≈ L 53.24, a 80.09, b 67.20 (standard published value)
+    const red = rgbToLab([1, 0, 0]);
+    expect(red[0]).toBeCloseTo(53.24, 1);
+    expect(red[1]).toBeCloseTo(80.09, 1);
+    expect(red[2]).toBeCloseTo(67.2, 1);
   });
 
-  it('keeps the region shading: darker pixels darker, lighter pixels lighter', () => {
-    const s: RGB = [0.6, 0.1, 0.2];
-    close(blend('tint', [0, 0, 0], s, 0.5), [0.3, 0.05, 0.1]);
-    close(blend('tint', [0, 0, 0], s, 1.5), [0.9, 0.15, 0.3]);
+  it('round-trips sRGB → Lab → sRGB', () => {
+    for (const hex of ['#9b1b30', '#c27c7c', '#e8b07a', '#5a2a1e', '#20120f', '#f4e1dc']) {
+      close(labToRgb(rgbToLab(hexToRgb(hex))), hexToRgb(hex), 1e-4);
+    }
   });
 
-  it('clamps to 0–1', () => {
-    close(blend('tint', [0, 0, 0], [0.8, 0.5, 0.1], 3), [1, 1, 0.3]);
-    close(blend('tint', [0, 0, 0], [0.8, 0.5, 0.1], -1), [0, 0, 0]);
+  it('deltaE76 is 0 for equal colours and grows with difference', () => {
+    const a = rgbToLab(hexToRgb('#9b1b30'));
+    expect(deltaE76(a, a)).toBe(0);
+    expect(deltaE76(a, rgbToLab(hexToRgb('#9c1b30')))).toBeLessThan(1);
+    expect(deltaE76(a, rgbToLab(hexToRgb('#c27c7c')))).toBeGreaterThan(20);
+  });
+});
+
+describe('pigment transfer (Shiseido / LipAT lipstick method)', () => {
+  const mean: Lab = [52, 22, 12]; // a typical bare-lip mean
+  const product = rgbToLab(hexToRgb('#9b1b30'));
+
+  it('a pixel at the region mean becomes exactly the product colour', () => {
+    expect(pigmentTransfer(mean, mean, product, 0.85, 0.35)).toEqual(product);
+  });
+
+  it('keeps kL of the lightness variation and kC of the colour variation', () => {
+    const pixel: Lab = [62, 26, 10]; // lighter, slightly redder spot
+    const out = pigmentTransfer(pixel, mean, product, 0.85, 0.35);
+    expect(out[0] - product[0]).toBeCloseTo(0.85 * 10, 9);
+    expect(out[1] - product[1]).toBeCloseTo(0.35 * 4, 9);
+    expect(out[2] - product[2]).toBeCloseTo(0.35 * -2, 9);
+  });
+
+  it('the region mean of the output equals the product colour (any texture)', () => {
+    const pixels: Lab[] = [
+      [40, 18, 10],
+      [60, 25, 14],
+      [55, 20, 8],
+      [53, 25, 16],
+    ];
+    const mu: Lab = [0, 1, 2].map(
+      (c) => pixels.reduce((s, p) => s + (p[c] as number), 0) / pixels.length,
+    ) as Lab;
+    const outs = pixels.map((p) => pigmentTransfer(p, mu, product, 0.8, 0.3));
+    [0, 1, 2].forEach((c) => {
+      const avg = outs.reduce((s, p) => s + (p[c] as number), 0) / outs.length;
+      expect(avg).toBeCloseTo(product[c] as number, 9);
+    });
+  });
+});
+
+describe('lipSpecular (LipAT roughness → shine)', () => {
+  it('glossy (0.1) boosts shine, matte (0.7) damps it, skin (0.3) about unchanged', () => {
+    const s = 0.3;
+    expect(lipSpecular(s, 0.1)).toBeGreaterThan(s);
+    expect(lipSpecular(s, 0.7)).toBeLessThan(s);
+    expect(Math.abs(lipSpecular(s, 0.3) - s)).toBeLessThan(0.15);
+  });
+
+  it('keeps 0 → 0 and stays within 0–1', () => {
+    for (const r of [0, 0.1, 0.4, 0.7, 1]) {
+      expect(lipSpecular(0, r)).toBe(0);
+      expect(lipSpecular(1, r)).toBeCloseTo(1, 9);
+    }
   });
 });

@@ -34,5 +34,8 @@ Option A: public GitHub repo, demo on GitHub Pages, SDK via jsDelivr. LICENSE is
 - `src/demo/` — the demo store; must only use the public SDK API.
 - `public/` — self-hosted MediaPipe models (`models/`, committed), wasm (`wasm/`, gitignored,
   copied from node_modules by the `postinstall` script), and generated assets.
+- Makeup rendering follows `docs/RENDERING_RESEARCH.md`. Never expose blend modes to
+  shoppers: products are category + shade + finish + intensity, and `src/sdk/render/recipes.ts`
+  maps them to rendering parameters. Base new categories on researched methods and real data.
 - Face region index sets live in `src/sdk/tracking/regions.ts`; verify changes with
   `?debug=1&regions=1&ids=1`. "L"/"R" = the subject's left/right (MediaPipe convention).

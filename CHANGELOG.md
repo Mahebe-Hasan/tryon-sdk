@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.0.6] — 2026-11-07 — Research-based lipstick rendering, product recipes
+
+Researched how commercial try-on renders makeup (Shiseido and L'Oréal patents, Amazon's
+LipAT paper, a "virtual face chart" patent, NYCU's measured Kubelka-Munk cosmetics, and the
+Perfect Corp / ModiFace / Banuba products). Findings and recipes are in
+`docs/RENDERING_RESEARCH.md`.
+
+- **No more user-facing blend modes.** Products are described by category + shade + finish
+  - intensity (`LipProduct`, `FaceView.setLipProducts`). Recipes in `render/recipes.ts` decide
+    coverage, texture retention, shine, edges and highlight per category and finish.
+- **New `pigment` technique (lipstick industry method):** split diffuse colour and shine;
+  shift the lips' mask-weighted mean CIELAB colour to the product colour while keeping
+  kL/kC of each pixel's own variation; reshape the shine with LipAT's roughness formula
+  (glossy 0.1 … matte 0.7); synthetic wet highlight on the lower lip for glossy finishes;
+  screen-blend recombination; sparkle for shimmer/metallic. Replaces the 0.0.5 `tint` mode.
+- Lip categories: lipstick, liquid lipstick, lip gloss, lip stain, lip liner. Finishes: matte,
+  satin, cream, sheer, gloss, shimmer, metallic.
+- CIELAB (D65) conversions on CPU and GPU, CIE76 ΔE, CPU reference functions
+  (`pigmentTransfer`, `lipSpecular`) with unit tests.
+- Demo: shop-style lip panel (product type, 10 invented shades, finish, intensity,
+  before/after). Blend, feather and edge controls removed.
+- Measured on synthetic lips: matte lipstick ΔE 3.1, liquid matte ΔE 1.7 from the product
+  colour; highlight rises from matte to gloss as expected; shading and lip lines are kept.
+
 ## [0.0.5] — 2026-11-07 — Phase 2 fix: lip colour looks on the lips, not over them
 
 Found by reviewing an iPhone recording (29 fps, tracking was aligned): the colour looked like

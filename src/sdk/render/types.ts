@@ -1,5 +1,6 @@
 import type { RegionShape } from '../tracking/regions';
 import type { BlendMode, RGB } from './color';
+import type { PigmentParams } from './recipes';
 
 /** Finishes the face renderer understands (nail finishes come in Phase 6). */
 export const FINISHES = ['matte', 'satin', 'cream', 'gloss', 'shimmer', 'metallic'] as const;
@@ -41,7 +42,7 @@ export const RENDER_CONFIG = {
     overlay: 0.3,
     'soft-light': 0.3,
     color: 0,
-    tint: 0.5,
+    pigment: 0, // pigment effects carry their own lightAdapt (PigmentParams)
   } satisfies Record<BlendMode, number>,
   /** How much skin/lip texture (local contrast) to put back on top, per blend mode. */
   detailByMode: {
@@ -51,10 +52,18 @@ export const RENDER_CONFIG = {
     overlay: 0,
     'soft-light': 0,
     color: 0,
-    tint: 0, // tint already carries every pixel's own light and shadow
+    pigment: 0, // pigment keeps texture through kL/kC instead
   } satisfies Record<BlendMode, number>,
-  /** Tint: exponent on (pixel ÷ region mean) brightness. 1 = natural; higher = deeper shading. */
-  tintContrast: 1.15,
+  /** Shine estimate: brightness above the local average that counts as specular. */
+  specThreshold: 0.015,
+  /** Shine estimate gain (higher = more of the bright detail treated as shine). */
+  specGain: 1.8,
+  /**
+   * Pigment light adaptation reference: mean diffuse lip L* (CIELAB) treated as "normal
+   * light". Approximate — real bare-lip L* varies widely across people (see research doc),
+   * which is why lip light adaptation is kept weak and capped at ±12 L*.
+   */
+  pigmentReferenceL: 50,
   /** Minimum mask blur (in mask texels) so every edge is anti-aliased. */
   minFeatherTexels: 0.8,
   /** Sparkle cells per face width. */
@@ -77,6 +86,13 @@ export interface RenderEffect {
    * inside it, so nothing bleeds past the outline (lips). Default 0.
    */
   featherInset?: number;
+  /** Required when blend = 'pigment' (lip products). */
+  pigment?: PigmentParams;
+  /**
+   * Where the synthetic wet highlight sits (frame px): centre, radii along / across the lip
+   * axis, and the unit lip axis. Lips only; omitted = no synthetic highlight.
+   */
+  glossSpot?: { x: number; y: number; rx: number; ry: number; ax: number; ay: number };
 }
 
 export interface FrameInfo {

@@ -5,7 +5,7 @@
  * blocks below are exported for the demo and for testing.
  */
 
-export const VERSION = '0.0.5';
+export const VERSION = '0.0.6';
 
 export const PRIVACY_STATEMENT =
   'Your camera stays on your device. The try-on runs entirely in your browser — no images or video are uploaded, stored, or shared.';
@@ -56,5 +56,16 @@ export {
   type Finish,
   type RendererPreference,
 } from './render/index';
+export {
+  LIP_CATEGORIES,
+  LIP_FINISHES,
+  LIP_RECIPES,
+  LIP_FINISH_PARAMS,
+  pigmentParams,
+  type LipCategory,
+  type LipFinish,
+  type PigmentParams,
+} from './render/recipes';
+export { lipProductEffect, type LipProduct } from './session/products';
 export { REGION_CONFIG, computeRegions, type Region, type RegionId } from './tracking/regions';
 export { DEFAULT_ONE_EURO, type OneEuroParams } from './tracking/smoothing';

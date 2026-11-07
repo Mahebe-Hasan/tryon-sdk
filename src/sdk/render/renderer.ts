@@ -6,7 +6,7 @@ import compositeFrag from './shaders/composite.frag.glsl?raw';
 import blitFrag from './shaders/blit.frag.glsl?raw';
 import statsFrag from './shaders/stats.frag.glsl?raw';
 import { withIncludes } from './blend';
-import { blendModeIndex } from './color';
+import { blendModeIndex, rgbToLab } from './color';
 import { shapeBBox, shapeTriangles, unionBBox } from './mask';
 import {
   FINISH_PRESETS,
@@ -52,7 +52,7 @@ export class WebGLRenderer implements Renderer {
     this.progs = {
       mask: new Program(gl, maskVert, maskFrag),
       blur: new Program(gl, quadVert, blurFrag),
-      stats: new Program(gl, quadVert, statsFrag),
+      stats: new Program(gl, quadVert, withIncludes(statsFrag)),
       composite: new Program(gl, quadVert, withIncludes(compositeFrag)),
       blit: new Program(gl, quadVert, blitFrag),
     };
@@ -125,6 +125,8 @@ export class WebGLRenderer implements Renderer {
     gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
     gl.generateMipmap(gl.TEXTURE_2D);
     const maxLod = Math.floor(Math.log2(Math.max(width, height)));
+    // Local-average scale for texture detail and the shine estimate (~1/40 of face width).
+    const detailLod = clamp(Math.log2(Math.max(2, (frame.faceWidth || width / 3) / 40)), 1, maxLod);
 
     let src = this.videoTex;
     let ping = 0;
@@ -132,9 +134,9 @@ export class WebGLRenderer implements Renderer {
       if (fx.opacity <= 0.003 || fx.shapes.length === 0) continue;
       if (!this.drawMask(fx)) continue;
       this.featherMask(fx.featherPx);
-      this.measureRegion();
+      this.measureRegion(detailLod);
       const target = this.frames[ping] as Target;
-      this.composite(fx, src, target, frame, maxLod);
+      this.composite(fx, src, target, frame, detailLod);
       src = target.tex;
       ping ^= 1;
     }
@@ -228,8 +230,8 @@ export class WebGLRenderer implements Renderer {
     this.drawQuad();
   }
 
-  /** (lum·mask, mask) into the stats target, then mipmap it (see stats.frag.glsl). */
-  private measureRegion(): void {
+  /** Mask-weighted diffuse Lab into the stats target, then mipmap it (see stats.frag.glsl). */
+  private measureRegion(detailLod: number): void {
     const gl = this.gl;
     const stats = this.stats as Target;
     gl.bindFramebuffer(gl.FRAMEBUFFER, stats.fb);
@@ -241,6 +243,9 @@ export class WebGLRenderer implements Renderer {
     gl.bindTexture(gl.TEXTURE_2D, (this.mask as Target).tex);
     gl.uniform1i(p.loc('u_video'), 0);
     gl.uniform1i(p.loc('u_mask'), 1);
+    gl.uniform1f(p.loc('u_detailLod'), detailLod);
+    gl.uniform1f(p.loc('u_specThresh'), RENDER_CONFIG.specThreshold);
+    gl.uniform1f(p.loc('u_specGain'), RENDER_CONFIG.specGain);
     this.drawQuad();
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.activeTexture(gl.TEXTURE0);
@@ -253,7 +258,7 @@ export class WebGLRenderer implements Renderer {
     src: WebGLTexture,
     target: Target,
     frame: FrameInfo,
-    maxLod: number,
+    detailLod: number,
   ): void {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.fb);
@@ -280,20 +285,21 @@ export class WebGLRenderer implements Renderer {
     // Stats mip where one texel ≈ the region size (so the sample averages the whole region).
     const maskMaxLod = Math.floor(Math.log2(Math.max(this.mw, this.mh)));
     const regionLod = clamp(Math.log2(Math.max(1, size * RENDER_CONFIG.maskScale)), 0, maskMaxLod);
-    const detailLod = clamp(
-      Math.log2(Math.max(2, (frame.faceWidth || this.w / 3) / 40)),
-      1,
-      maxLod,
-    );
     const f = FINISH_PRESETS[fx.finish];
+    const pg = fx.pigment;
 
     gl.uniform3f(p.loc('u_color'), fx.color[0], fx.color[1], fx.color[2]);
     gl.uniform1i(p.loc('u_mode'), blendModeIndex(fx.blend));
     gl.uniform1f(p.loc('u_opacity'), clamp(fx.opacity, 0, 1));
     gl.uniform1f(p.loc('u_featherInset'), clamp(fx.featherInset ?? 0, 0, 1));
-    gl.uniform1f(p.loc('u_tintContrast'), RENDER_CONFIG.tintContrast);
-    gl.uniform1f(p.loc('u_lightAdapt'), RENDER_CONFIG.lightAdaptByMode[fx.blend]);
+    gl.uniform1f(
+      p.loc('u_lightAdapt'),
+      pg ? pg.lightAdapt : RENDER_CONFIG.lightAdaptByMode[fx.blend],
+    );
     gl.uniform1f(p.loc('u_refLum'), RENDER_CONFIG.referenceLuminance);
+    gl.uniform1f(p.loc('u_refL'), RENDER_CONFIG.pigmentReferenceL);
+    gl.uniform1f(p.loc('u_specThresh'), RENDER_CONFIG.specThreshold);
+    gl.uniform1f(p.loc('u_specGain'), RENDER_CONFIG.specGain);
     gl.uniform2f(p.loc('u_regionCenter'), cx / this.w, cy / this.h);
     gl.uniform1f(p.loc('u_regionLod'), regionLod);
     gl.uniform1f(p.loc('u_detailLod'), detailLod);
@@ -301,14 +307,27 @@ export class WebGLRenderer implements Renderer {
     gl.uniform1f(p.loc('u_matte'), f.matte);
     gl.uniform1f(p.loc('u_highlightKeep'), f.highlightKeep);
     gl.uniform1f(p.loc('u_gloss'), f.gloss);
-    gl.uniform1f(p.loc('u_sparkle'), f.sparkle);
+    gl.uniform1f(p.loc('u_sparkle'), pg ? pg.sparkle : f.sparkle);
     gl.uniform1f(p.loc('u_metal'), f.metal);
+    if (pg) {
+      const lab = rgbToLab(fx.color);
+      gl.uniform3f(p.loc('u_productLab'), lab[0], lab[1], lab[2]);
+      gl.uniform1f(p.loc('u_kL'), pg.kL);
+      gl.uniform1f(p.loc('u_kC'), pg.kC);
+      gl.uniform1f(p.loc('u_roughness'), pg.roughness);
+      gl.uniform1f(p.loc('u_specScale'), pg.specScale);
+      gl.uniform1f(p.loc('u_specTint'), pg.specTint);
+      const gs = fx.glossSpot;
+      gl.uniform1f(p.loc('u_glossSpotStrength'), gs ? pg.glossSpot : 0);
+      gl.uniform4f(p.loc('u_glossSpot'), gs?.x ?? 0, gs?.y ?? 0, gs?.rx ?? 1, gs?.ry ?? 1);
+      gl.uniform2f(p.loc('u_glossAxis'), gs?.ax ?? 1, gs?.ay ?? 0);
+    }
     gl.uniformMatrix3fv(
       p.loc('u_faceXform'),
       false,
       frame.faceTransform ?? new Float32Array([1 / this.w, 0, 0, 0, 1 / this.w, 0, 0, 0, 1]),
     );
-    gl.uniform1f(p.loc('u_sparkleDensity'), RENDER_CONFIG.sparkleDensity);
+    gl.uniform1f(p.loc('u_sparkleDensity'), pg ? pg.sparkleDensity : RENDER_CONFIG.sparkleDensity);
     gl.uniform2f(p.loc('u_size'), this.w, this.h);
     gl.uniform1f(p.loc('u_time'), frame.time);
     this.drawQuad();

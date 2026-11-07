@@ -15,6 +15,36 @@ export interface FaceMetrics {
   transform: Float32Array;
 }
 
+/**
+ * Where a wet lip highlight naturally sits: on the fullest part of the lower lip, a little
+ * above its middle (between inner-lip 14 and outer-lip 17), elongated along the mouth axis
+ * (61 → 291). Returned in frame px for the renderer's synthetic gloss spot.
+ */
+export function lipGlossSpot(
+  landmarks: readonly Point3[],
+  w: number,
+  h: number,
+): { x: number; y: number; rx: number; ry: number; ax: number; ay: number } {
+  const P = (i: number): Vec2 => {
+    const p = landmarks[i];
+    return p ? { x: p.x * w, y: p.y * h } : { x: 0, y: 0 };
+  };
+  const inner = P(14);
+  const outer = P(17);
+  const left = P(61);
+  const right = P(291);
+  const mouthW = Math.max(1, Math.hypot(right.x - left.x, right.y - left.y));
+  const lowerLipH = Math.max(1, Math.hypot(outer.x - inner.x, outer.y - inner.y));
+  return {
+    x: inner.x + (outer.x - inner.x) * 0.42,
+    y: inner.y + (outer.y - inner.y) * 0.42,
+    rx: mouthW * 0.2,
+    ry: lowerLipH * 0.24,
+    ax: (right.x - left.x) / mouthW,
+    ay: (right.y - left.y) / mouthW,
+  };
+}
+
 export function faceMetrics(landmarks: readonly Point3[], w: number, h: number): FaceMetrics {
   const P = (i: number): Vec2 => {
     const p = landmarks[i];
