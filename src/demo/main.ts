@@ -6,6 +6,7 @@ import {
   FaceView,
   type CameraState,
 } from '../sdk/index';
+import { mountTestEffect } from './testEffect';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -67,7 +68,21 @@ const view = new FaceView({
     ...(num('beta') !== undefined && { beta: num('beta') }),
   },
   ...(num('detect') !== undefined && { detectMaxSize: num('detect') }),
+  renderer: params.get('renderer') === '2d' ? 'canvas2d' : 'auto',
 });
+mountTestEffect(el('fx'), view, params.get('fx'));
+el('renderer-info').textContent =
+  `Renderer: ${view.rendererKind === 'webgl2' ? 'WebGL2' : 'Canvas 2D'}`;
+const rendererLink = el<HTMLAnchorElement>('renderer-link');
+const otherParams = new URLSearchParams(location.search);
+if (view.rendererKind === 'canvas2d' && params.get('renderer') === '2d') {
+  otherParams.delete('renderer');
+  rendererLink.textContent = 'Use WebGL2';
+} else {
+  otherParams.set('renderer', '2d');
+  rendererLink.textContent = 'Try Canvas 2D fallback';
+}
+rendererLink.href = `?${otherParams.toString()}`;
 
 function showPanel(
   title: string,

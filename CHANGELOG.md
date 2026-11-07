@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.0.3] — 2026-11-07 — Phase 2: Render engine
+
+- WebGL2 pipeline (`src/sdk/render/renderer.ts`): video uploaded as a mipmapped texture;
+  per effect, region shapes are triangulated (earcut for polygons with holes, quads + round
+  joins for strokes, fans for circles), rasterised into a half-resolution mask (MAX blending,
+  stencil clipping for the iris), feathered with a separable Gaussian blur, then composited.
+- Blend modes in GLSL: normal, multiply, screen, overlay, soft-light, color (W3C formulas,
+  mirrored by CPU reference functions in `color.ts`).
+- Finishes: matte, satin, cream, gloss, shimmer, metallic. Gloss builds a white specular
+  layer from the frame's own bright spots (so highlights move with the light). Shimmer adds a
+  twinkling sparkle anchored to the face. Every finish keeps skin and lip texture via a
+  high-pass detail layer. Strengths live in `FINISH_PRESETS` / `RENDER_CONFIG`.
+- Lighting adaptation: each effect samples the region's average brightness from a coarse mip
+  level and scales the shade toward the scene (per-blend-mode strength in config).
+- Canvas 2D fallback (`fallback2d.ts`): polygon fill + `globalCompositeOperation`, feathering
+  faked by drawing the mask at low resolution and scaling it up. Used automatically without
+  WebGL2 or after a WebGL context loss; force it with `?renderer=2d`.
+- `FaceView.setEffects()` applies colour effects to named face regions; feather scales with
+  face width.
+- Demo: "Test effect" panel (region, colour, blend, finish, opacity, feather), defaulting to a
+  ruby lip colour.
+- Unit tests for hex/sRGB/linear conversion, all blend functions, triangulation, strokes,
+  circles, bounding boxes and the face-space transform.
+
 ## [0.0.2] — 2026-11-07 — Phase 1: Camera and face tracking
 
 - Camera module: front/back switch, iOS-safe `<video>` (playsinline/muted/autoplay), and clear

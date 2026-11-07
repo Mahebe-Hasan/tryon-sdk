@@ -5,7 +5,7 @@
  * blocks below are exported for the demo and for testing.
  */
 
-export const VERSION = '0.0.2';
+export const VERSION = '0.0.3';
 
 export const PRIVACY_STATEMENT =
   'Your camera stays on your device. The try-on runs entirely in your browser — no images or video are uploaded, stored, or shared.';
@@ -40,6 +40,21 @@ function hasWebGL2(doc: Document): boolean {
 }
 
 export { Camera, type CameraState, type Facing } from './camera/camera';
-export { FaceView, type FaceViewOptions, type FaceViewEvents } from './session/faceView';
+export {
+  FaceView,
+  type FaceViewOptions,
+  type FaceViewEvents,
+  type EffectSpec,
+} from './session/faceView';
+export {
+  createRenderer,
+  BLEND_MODES,
+  FINISHES,
+  FINISH_PRESETS,
+  RENDER_CONFIG,
+  type BlendMode,
+  type Finish,
+  type RendererPreference,
+} from './render/index';
 export { REGION_CONFIG, computeRegions, type Region, type RegionId } from './tracking/regions';
 export { DEFAULT_ONE_EURO, type OneEuroParams } from './tracking/smoothing';

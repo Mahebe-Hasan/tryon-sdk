@@ -18,7 +18,11 @@ Model cards (checked 2026-11-07):
 Model downloaded from
 `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`.
 
-Planned: `earcut` (ISC), `hand_landmarker.task` (Phase 6, re-check its model card).
+| Component      | License | Source                                              |
+| -------------- | ------- | --------------------------------------------------- |
+| `earcut` 3.2.4 | ISC     | npm package `license` field (polygon triangulation) |
+
+Planned: `hand_landmarker.task` (Phase 6, re-check its model card).
 
 ## Development only (not shipped)
 

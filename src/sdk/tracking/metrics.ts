@@ -1,0 +1,41 @@
+import type { Vec2 } from './paths';
+import type { Point3 } from './smoothing';
+
+export interface FaceMetrics {
+  /** Distance between the face-side landmarks 234 and 454, in frame pixels. */
+  width: number;
+  /** Point between the eyes (landmark 168), frame pixels. */
+  center: Vec2;
+  /** Head roll in radians (0 = upright). */
+  roll: number;
+  /**
+   * Column-major 3×3 affine: frame px → face space (1 unit = face width, origin between the
+   * eyes, x along the face's left-right axis). Feeds the renderer's face-anchored effects.
+   */
+  transform: Float32Array;
+}
+
+export function faceMetrics(landmarks: readonly Point3[], w: number, h: number): FaceMetrics {
+  const P = (i: number): Vec2 => {
+    const p = landmarks[i];
+    return p ? { x: p.x * w, y: p.y * h } : { x: 0, y: 0 };
+  };
+  const a = P(234);
+  const b = P(454);
+  const c = P(168);
+  const width = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+  const ex = { x: (b.x - a.x) / width, y: (b.y - a.y) / width };
+  const ey = { x: -ex.y, y: ex.x };
+  const transform = new Float32Array([
+    ex.x / width,
+    ey.x / width,
+    0,
+    ex.y / width,
+    ey.y / width,
+    0,
+    -(c.x * ex.x + c.y * ex.y) / width,
+    -(c.x * ey.x + c.y * ey.y) / width,
+    1,
+  ]);
+  return { width, center: c, roll: Math.atan2(ex.y, ex.x), transform };
+}

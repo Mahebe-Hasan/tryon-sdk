@@ -207,6 +207,53 @@ h1 {
   color: var(--bad);
 }
 
+.fx {
+  margin-top: 12px;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 12px 16px 16px;
+}
+
+.fx h2 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.fx-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px 16px;
+}
+
+.fx-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.fx-grid select,
+.fx-grid input {
+  font: inherit;
+  min-height: 36px;
+  color: var(--fg);
+}
+
+.fx-grid input[type='color'] {
+  width: 100%;
+  padding: 2px;
+  border: 1px solid var(--muted);
+  border-radius: 8px;
+  background: transparent;
+}
+
+.renderer {
+  margin: 8px 0 0;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
 [hidden] {
   display: none !important;
 }

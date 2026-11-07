@@ -2,9 +2,14 @@ import { Camera, type CameraState } from '../camera/camera';
 import { DebugHud, type HudToggles } from '../debug/hud';
 import { drawOverlay } from '../debug/overlay';
 import { Emitter } from '../events';
+import { createRenderer, type RendererPreference } from '../render/index';
+import { Canvas2DRenderer } from '../render/fallback2d';
+import { hexToRgb, type BlendMode, type RGB } from '../render/color';
+import type { Finish, RenderEffect, Renderer } from '../render/types';
 import { FaceTracker } from '../tracking/face';
+import { faceMetrics } from '../tracking/metrics';
 import { Presence } from '../tracking/presence';
-import { computeRegions } from '../tracking/regions';
+import { computeRegions, type Region, type RegionId } from '../tracking/regions';
 import { LandmarkSmoother, type OneEuroParams, type Point3 } from '../tracking/smoothing';
 
 export interface FaceViewOptions {
@@ -20,39 +25,62 @@ export interface FaceViewOptions {
   fadeMs?: number;
   /** Longest side of the detector input in px. */
   detectMaxSize?: number;
+  /** 'auto' = WebGL2 with Canvas 2D fallback. */
+  renderer?: RendererPreference;
+}
+
+/** One colour applied to one or more face regions. */
+export interface EffectSpec {
+  id: string;
+  regions: RegionId[];
+  /** '#RRGGBB' */
+  color: string;
+  blend: BlendMode;
+  finish: Finish;
+  /** 0–1 */
+  opacity: number;
+  /** Soft-edge radius as a fraction of face width (e.g. 0.01). */
+  feather: number;
 }
 
 export interface FaceViewEvents extends Record<string, unknown> {
   'camera-state': CameraState;
   'model-progress': { loaded: number; total: number | null };
-  ready: { delegate: string };
+  ready: { delegate: string; renderer: string };
   'tracking-lost': undefined;
   'tracking-found': undefined;
   error: unknown;
 }
 
+interface ResolvedEffect extends Omit<EffectSpec, 'color'> {
+  rgb: RGB;
+}
+
 /**
- * Phase 1 building block: camera preview + face tracking + debug overlays.
- * Later phases render makeup through the same loop.
+ * Camera preview + face tracking + makeup rendering (+ debug overlays with `debug: true`).
+ * The video element stays underneath as a fallback; the renderer canvas covers it.
  */
 export class FaceView {
   readonly events = new Emitter<FaceViewEvents>();
   readonly camera: Camera;
+  private renderer: Renderer;
   private tracker: FaceTracker | null = null;
   private trackerPromise: Promise<FaceTracker> | null = null;
   private readonly smoother: LandmarkSmoother;
   private readonly presence: Presence;
   private readonly stage: HTMLDivElement;
   private readonly mirror: HTMLDivElement;
-  private readonly canvas: HTMLCanvasElement;
-  private readonly ctx: CanvasRenderingContext2D;
+  private readonly overlay: HTMLCanvasElement;
+  private readonly overlayCtx: CanvasRenderingContext2D;
   private readonly hud: DebugHud | null = null;
   private toggles: HudToggles;
+  private effects: ResolvedEffect[] = [];
   private running = false;
   private frameHandle: number | null = null;
   private lastLandmarks: Point3[] | null = null;
   private wasTracked = false;
   private resumeOnVisible = false;
+  private readonly t0 = performance.now();
   // Stats
   private frames = 0;
   private fpsT0 = 0;
@@ -60,6 +88,9 @@ export class FaceView {
   private detectMs = 0;
   private renderMs = 0;
   private lastBlendshapes: Record<string, number> = {};
+
+  private static readonly FILL =
+    'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;';
 
   constructor(private opts: FaceViewOptions) {
     this.camera = new Camera();
@@ -73,14 +104,17 @@ export class FaceView {
       'position:relative;width:100%;height:100%;overflow:hidden;background:#000;';
     this.mirror = document.createElement('div');
     this.mirror.style.cssText = 'position:absolute;inset:0;';
-    const fill = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;';
-    this.camera.video.style.cssText = fill;
-    this.canvas = document.createElement('canvas');
-    this.canvas.style.cssText = `${fill}pointer-events:none;`;
-    const ctx = this.canvas.getContext('2d');
+    this.camera.video.style.cssText = FaceView.FILL;
+
+    this.renderer = createRenderer(opts.renderer ?? 'auto');
+    this.styleRendererCanvas();
+
+    this.overlay = document.createElement('canvas');
+    this.overlay.style.cssText = `${FaceView.FILL}pointer-events:none;`;
+    const ctx = this.overlay.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D is not available');
-    this.ctx = ctx;
-    this.mirror.append(this.camera.video, this.canvas);
+    this.overlayCtx = ctx;
+    this.mirror.append(this.camera.video, this.renderer.canvas, this.overlay);
     this.stage.append(this.mirror);
 
     if (opts.debug) {
@@ -94,6 +128,15 @@ export class FaceView {
 
     this.camera.events.on('state', (s) => this.events.emit('camera-state', s));
     document.addEventListener('visibilitychange', this.onVisibility);
+  }
+
+  get rendererKind(): string {
+    return this.renderer.kind;
+  }
+
+  /** Replace the active effects. Throws on an invalid colour. */
+  setEffects(specs: EffectSpec[]): void {
+    this.effects = specs.map(({ color, ...rest }) => ({ ...rest, rgb: hexToRgb(color) }));
   }
 
   /** Start camera and tracking. Resolves with the final camera state. */
@@ -127,7 +170,8 @@ export class FaceView {
     this.presence.reset();
     this.smoother.reset();
     this.lastLandmarks = null;
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.renderer.canvas.style.visibility = 'hidden';
+    this.overlayCtx.clearRect(0, 0, this.overlay.width, this.overlay.height);
   }
 
   destroy(): void {
@@ -135,8 +179,14 @@ export class FaceView {
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.tracker?.close();
     this.tracker = null;
+    this.renderer.destroy();
     this.stage.remove();
     this.events.clear();
+  }
+
+  private styleRendererCanvas(): void {
+    // Hidden until the first frame is drawn, so the live video shows through meanwhile.
+    this.renderer.canvas.style.cssText = `${FaceView.FILL}pointer-events:none;visibility:hidden;`;
   }
 
   private loadTracker(): Promise<FaceTracker> {
@@ -145,7 +195,7 @@ export class FaceView {
       detectMaxSize: this.opts.detectMaxSize ?? 640,
       onProgress: (loaded, total) => this.events.emit('model-progress', { loaded, total }),
     }).then((t) => {
-      this.events.emit('ready', { delegate: t.delegate });
+      this.events.emit('ready', { delegate: t.delegate, renderer: this.renderer.kind });
       return t;
     });
     this.trackerPromise.catch(() => (this.trackerPromise = null));
@@ -168,6 +218,17 @@ export class FaceView {
       void this.start(this.camera.facing);
     }
   };
+
+  /** WebGL context lost (GPU reset, too many contexts): continue with Canvas 2D. */
+  private checkRenderer(): void {
+    const r = this.renderer as Renderer & { lost?: boolean };
+    if (!r.lost) return;
+    console.warn('[TryOn] WebGL context lost — switching to Canvas 2D');
+    const next = new Canvas2DRenderer();
+    r.canvas.replaceWith(next.canvas);
+    this.renderer = next;
+    this.styleRendererCanvas();
+  }
 
   // ---- Frame loop ------------------------------------------------------------------------
 
@@ -211,6 +272,7 @@ export class FaceView {
     const tracker = this.tracker;
     const video = this.camera.video;
     if (!tracker || !this.camera.isActive || video.readyState < 2) return;
+    this.checkRenderer();
     const now = performance.now();
 
     const t0 = performance.now();
@@ -235,14 +297,25 @@ export class FaceView {
 
     const w = video.videoWidth;
     const h = video.videoHeight;
-    if (this.canvas.width !== w || this.canvas.height !== h) {
-      this.canvas.width = w;
-      this.canvas.height = h;
-    }
+    const lm = this.lastLandmarks;
+    const needRegions = lm && (this.effects.length > 0 || (this.hud && this.toggles.regions));
+    const regions = needRegions ? computeRegions(lm, w, h) : [];
+    const metrics = lm ? faceMetrics(lm, w, h) : null;
+
+    const renderEffects = metrics ? this.buildEffects(regions, metrics.width, opacity) : [];
+    if (this.renderer.canvas.style.visibility) this.renderer.canvas.style.visibility = '';
+    this.renderer.render(video, w, h, renderEffects, {
+      time: (now - this.t0) / 1000,
+      faceWidth: metrics?.width ?? 0,
+      faceTransform: metrics?.transform ?? null,
+    });
+
     if (this.hud) {
-      const regions =
-        this.toggles.regions && this.lastLandmarks ? computeRegions(this.lastLandmarks, w, h) : [];
-      drawOverlay(this.ctx, this.lastLandmarks, regions, {
+      if (this.overlay.width !== w || this.overlay.height !== h) {
+        this.overlay.width = w;
+        this.overlay.height = h;
+      }
+      drawOverlay(this.overlayCtx, lm, this.toggles.regions ? regions : [], {
         ...this.toggles,
         opacity,
         mirrored: this.camera.mirrored,
@@ -261,7 +334,7 @@ export class FaceView {
         fps: this.fps,
         detectMs: this.detectMs,
         renderMs: this.renderMs,
-        delegate: tracker.delegate,
+        delegate: `${tracker.delegate} / ${this.renderer.kind}`,
         videoSize: `${w}×${h}`,
         detectSize: `${Math.round(w * scale)}×${Math.round(h * scale)}`,
         tracked,
@@ -269,6 +342,23 @@ export class FaceView {
         blendshapes: this.lastBlendshapes,
       });
     }
+  }
+
+  private buildEffects(regions: Region[], faceWidth: number, presence: number): RenderEffect[] {
+    if (presence <= 0 || this.effects.length === 0) return [];
+    const byId = new Map(regions.map((r) => [r.id, r]));
+    return this.effects.map((fx) => ({
+      id: fx.id,
+      shapes: fx.regions.flatMap((id) => {
+        const r = byId.get(id);
+        return r ? [r.shape] : [];
+      }),
+      color: fx.rgb,
+      blend: fx.blend,
+      finish: fx.finish,
+      opacity: fx.opacity * presence,
+      featherPx: fx.feather * faceWidth,
+    }));
   }
 }
 
