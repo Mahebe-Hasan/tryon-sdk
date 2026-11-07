@@ -9,3 +9,7 @@ playwright-report/
 Thumbs.db
 .vscode/
 .idea/
+
+# Copied from node_modules by scripts/copy-mediapipe.mjs
+public/wasm/*
+!public/wasm/.gitkeep

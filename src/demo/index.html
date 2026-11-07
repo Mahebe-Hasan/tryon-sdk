@@ -4,18 +4,43 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#b0305a" />
-    <title>Hello TryOn</title>
+    <title>TryOn — Face Tracking</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="card">
-      <h1>Hello TryOn</h1>
-      <p class="sub">
-        Virtual try-on for makeup &amp; press-on nails — SDK <span id="version"></span>
-      </p>
-      <h2>Your device</h2>
-      <ul id="checks" class="checks" aria-live="polite"></ul>
+    <main class="app">
+      <header class="top">
+        <h1>TryOn <span class="ver" id="version"></span></h1>
+        <a id="debug-link" class="link" href="?debug=1">Debug view</a>
+      </header>
+
+      <section class="stage-wrap">
+        <div id="stage" class="stage"></div>
+
+        <div id="panel" class="panel" role="status" aria-live="polite">
+          <h2 id="panel-title">Face tracking test</h2>
+          <p id="panel-text">Allow the camera to see the face landmarks follow you in real time.</p>
+          <div id="progress" class="progress" hidden>
+            <div id="progress-bar" class="progress-bar"></div>
+          </div>
+          <div class="panel-actions">
+            <button id="start" class="btn primary" type="button">Start camera</button>
+            <button id="photo" class="btn" type="button" hidden>Use a photo instead</button>
+          </div>
+        </div>
+
+        <p id="hint" class="hint" hidden>Face not found — look at the camera</p>
+
+        <div id="controls" class="controls" hidden>
+          <button id="switch" class="btn round" type="button" aria-label="Switch camera" hidden>
+            ⟲
+          </button>
+          <button id="stop" class="btn round" type="button" aria-label="Stop camera">✕</button>
+        </div>
+      </section>
+
       <p class="privacy" id="privacy"></p>
+      <ul id="checks" class="checks"></ul>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>

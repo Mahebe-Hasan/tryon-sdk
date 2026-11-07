@@ -32,4 +32,7 @@ Option A: public GitHub repo, demo on GitHub Pages, SDK via jsDelivr. LICENSE is
 
 - `src/sdk/` — the SDK (public API in `index.ts`). No DOM framework, no demo code.
 - `src/demo/` — the demo store; must only use the public SDK API.
-- `public/` — self-hosted MediaPipe models (`models/`), wasm (`wasm/`), and generated assets.
+- `public/` — self-hosted MediaPipe models (`models/`, committed), wasm (`wasm/`, gitignored,
+  copied from node_modules by the `postinstall` script), and generated assets.
+- Face region index sets live in `src/sdk/tracking/regions.ts`; verify changes with
+  `?debug=1&regions=1&ids=1`. "L"/"R" = the subject's left/right (MediaPipe convention).

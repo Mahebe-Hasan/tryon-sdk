@@ -1,11 +1,11 @@
 /**
  * TryOn SDK — public entry point.
  *
- * Phase 0 only exposes version and environment checks. The full `TryOn` API
- * (create/open/setShade/...) arrives in later phases.
+ * The full `TryOn` API (create/open/setShade/...) arrives in Phase 8. Until then the building
+ * blocks below are exported for the demo and for testing.
  */
 
-export const VERSION = '0.0.1';
+export const VERSION = '0.0.2';
 
 export const PRIVACY_STATEMENT =
   'Your camera stays on your device. The try-on runs entirely in your browser — no images or video are uploaded, stored, or shared.';
@@ -38,3 +38,8 @@ function hasWebGL2(doc: Document): boolean {
     return false;
   }
 }
+
+export { Camera, type CameraState, type Facing } from './camera/camera';
+export { FaceView, type FaceViewOptions, type FaceViewEvents } from './session/faceView';
+export { REGION_CONFIG, computeRegions, type Region, type RegionId } from './tracking/regions';
+export { DEFAULT_ONE_EURO, type OneEuroParams } from './tracking/smoothing';

@@ -6,7 +6,8 @@ user's device — no app, no backend, no uploads.
 > Your camera stays on your device. The try-on runs entirely in your browser — no images or
 > video are uploaded, stored, or shared.
 
-**Status:** Phase 0 (project setup). See [CHANGELOG.md](CHANGELOG.md) and
+**Status:** Phase 1 (camera and face tracking). Open the demo with `?debug=1` to see the
+landmark and region overlays. See [CHANGELOG.md](CHANGELOG.md) and
 [virtual-tryon-build-plan.md](virtual-tryon-build-plan.md).
 
 **Demo:** https://mahebe-hasan.github.io/tryon-sdk/
