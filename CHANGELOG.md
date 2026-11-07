@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.0.10] — 2026-11-08 — Face-shape placement, concealer types, true shades, compare slider
+
+- **Face-shape detection** (`tracking/faceShape.ts`): oval, round, square, oblong, heart,
+  diamond, triangle. Measures face length, forehead, cheekbone and jaw widths and the jaw angle
+  (frontal frames only, voted over ~90 frames). Prototypes were fitted on 21 labelled reference
+  faces (a contour chart and photos): 14/15 usable samples correct. The detected shape is shown,
+  and the user can override it (`FaceView.setFaceShape`, `'face-shape'` event).
+- **Placement by face shape** (`render/placements.ts`), following makeup-artist charts. Round:
+  contour temples and the sides of the face, vertical blush, highlight down the centre. Oblong:
+  contour hairline and under the chin, horizontal blush, highlight across the cheekbones.
+  Square: contour temples and jaw corners. Heart: blush on the apples, highlight the chin. And
+  so on. New zones: temples, hairline, face sides, jaw corners, under the chin, centre
+  forehead, under-eye triangles, chin, vertical blush.
+- **Blended, never stripes:** zones are tapered strokes (wide where the product sits, thinning
+  as it blends out), then feathered. Products layer on top of each other instead of replacing.
+- **Concealer types** (standard colour theory): cover (own shade, more on darker spots),
+  brighten (lighter shade on the high points), peach corrector (cancels blue-purple dark
+  circles), green corrector (neutralises redness only where skin is redder than average).
+- **True shades in every light:** product colours no longer follow the room light
+  (`RENDER_CONFIG.productSceneLight = 0`). Texture and shading still come from the real image.
+- **Before/after slider** (`FaceView.setCompare`): off by default, with a camera button.
+  Left of the line = before, right = after. Drag fully left for makeup on the whole face.
+  Works with mirrored front cameras and cropped (object-fit: cover) video. The split is done in
+  the final GPU pass using the same frame.
+- Dev server: watch `src/sdk` and reload on shader edits (`?raw` .glsl imports were served
+  stale, which hid a bug during local checks).
+
 ## [0.0.9] — 2026-11-08 — Face makeup realism fixes (from phone testing)
 
 - **Fixed: muddy/olive concealer (and wrong colours on small regions).** The region's mean

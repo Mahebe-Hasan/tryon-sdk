@@ -1,7 +1,11 @@
 import {
   BLUSH_STYLE_NAMES,
+  CONCEALER_TYPES,
+  FACE_SHAPES,
   finishesFor,
   type BlushStyle,
+  type ConcealerType,
+  type FaceShape,
   type FaceView,
   type Product,
   type ProductCategory,
@@ -10,8 +14,8 @@ import {
 
 /**
  * Look builder, like a shop: pick a product type, tap a shade, choose finish and intensity.
- * Several products stack into one look (foundation + blush + eyeshadow + lipstick …).
- * Rendering is decided entirely by the SDK's product recipes.
+ * Several products stack into one look. Placement of blush/contour/bronzer/highlighter
+ * follows the detected face shape (overridable). Rendering is decided by the SDK recipes.
  */
 
 interface Shade {
@@ -54,6 +58,31 @@ const FINISH_LABELS: Record<ProductFinish, string> = {
   dewy: 'Dewy',
 };
 
+const SHAPE_LABELS: Record<FaceShape, string> = {
+  oval: 'Oval',
+  round: 'Round',
+  square: 'Square',
+  oblong: 'Oblong (long)',
+  heart: 'Heart',
+  diamond: 'Diamond',
+  triangle: 'Triangle (pear)',
+};
+
+const STYLE_LABELS: Record<BlushStyle, string> = {
+  lifted: 'Lifted (to temples)',
+  draped: 'Draped (cheekbone)',
+  sunkissed: 'Sun-kissed (across nose)',
+  apples: 'Apples (round)',
+  vertical: 'Vertical (outer cheek)',
+};
+
+const CONCEALER_LABELS: Record<ConcealerType, string> = {
+  cover: 'Cover (your shade)',
+  brighten: 'Brighten (lighter shade)',
+  peach: 'Peach corrector (dark circles)',
+  green: 'Green corrector (redness)',
+};
+
 /** Invented sample shades (no brand assets). */
 const SKIN: Shade[] = [
   { name: 'Porcelain', hex: '#f3d9c6' },
@@ -77,10 +106,24 @@ const LIPS: Shade[] = [
   { name: 'Cherry Red', hex: '#d0213a' },
   { name: 'Plum Noir', hex: '#4a1c2e' },
 ];
+const CONCEALER_SHADES: Record<ConcealerType, Shade[]> = {
+  cover: SKIN,
+  brighten: SKIN.map((s) => ({ name: `${s.name} Light`, hex: lighten(s.hex, 0.14) })),
+  peach: [
+    { name: 'Soft Peach', hex: '#f6c3a4' },
+    { name: 'Peach', hex: '#f2a77e' },
+    { name: 'Apricot', hex: '#e98e5c' },
+    { name: 'Deep Orange', hex: '#cf6d3b' },
+  ],
+  green: [
+    { name: 'Mint', hex: '#cfe8c6' },
+    { name: 'Green', hex: '#a9d6a0' },
+  ],
+};
 const SHADES: Record<ProductCategory, Shade[]> = {
   foundation: SKIN,
   'skin-tint': SKIN,
-  concealer: SKIN.map((s) => ({ name: `${s.name} Light`, hex: lighten(s.hex, 0.12) })),
+  concealer: SKIN,
   blush: [
     { name: 'Peach Glow', hex: '#f2a08a' },
     { name: 'Soft Rose', hex: '#e07a8f' },
@@ -136,19 +179,21 @@ function lighten(hex: string, t: number): string {
   return `#${ch((n >> 16) & 255)}${ch((n >> 8) & 255)}${ch(n & 255)}`;
 }
 
+type Applied = Product & { shadeName: string };
+
 export function mountTestEffect(host: HTMLElement, view: FaceView, initial: string | null): void {
-  const look = new Map<string, Product & { shadeName: string }>();
+  const look = new Map<string, Applied>();
   let category: ProductCategory = 'lipstick';
-  let showMakeup = true;
   const finishByCat = new Map<ProductCategory, ProductFinish>();
   const intensityByCat = new Map<ProductCategory, number>();
-  let blushStyle: BlushStyle = 'lifted';
+  let blushStyle: BlushStyle | 'auto' = 'auto';
+  let concealerType: ConcealerType = 'cover';
 
   host.innerHTML = '';
   const title = document.createElement('h2');
   title.textContent = 'Build a look';
-  const applied = document.createElement('div');
-  applied.className = 'chips';
+  const shapeRow = document.createElement('div');
+  shapeRow.className = 'fx-grid';
   const grid = document.createElement('div');
   grid.className = 'fx-grid';
   const swatches = document.createElement('div');
@@ -156,16 +201,42 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
   swatches.setAttribute('role', 'radiogroup');
   const shadeName = document.createElement('p');
   shadeName.className = 'shade-name';
-  host.append(title, grid, swatches, shadeName, applied);
+  const applied = document.createElement('div');
+  applied.className = 'chips';
+  host.append(title, shapeRow, grid, swatches, shadeName, applied);
 
-  const field = (label: string, input: HTMLElement): HTMLLabelElement => {
+  const field = (parent: HTMLElement, label: string, input: HTMLElement): HTMLLabelElement => {
     const l = document.createElement('label');
     const span = document.createElement('span');
     span.textContent = label;
     l.append(span, input);
-    grid.append(l);
+    parent.append(l);
     return l;
   };
+  const select = (options: [string, string][]): HTMLSelectElement => {
+    const s = document.createElement('select');
+    for (const [v, t] of options) {
+      const o = document.createElement('option');
+      o.value = v;
+      o.textContent = t;
+      s.append(o);
+    }
+    return s;
+  };
+
+  // Face shape: auto (shows the detected shape) or a manual override.
+  const shapeSel = select([
+    ['auto', 'Auto (detecting…)'],
+    ...FACE_SHAPES.map((s): [string, string] => [s, SHAPE_LABELS[s]]),
+  ]);
+  field(shapeRow, 'Face shape', shapeSel);
+  const autoOption = shapeSel.options[0] as HTMLOptionElement;
+  view.events.on('face-shape', ({ detected }) => {
+    autoOption.textContent = detected ? `Auto (${SHAPE_LABELS[detected]})` : 'Auto (detecting…)';
+  });
+  shapeSel.addEventListener('change', () => {
+    view.setFaceShape(shapeSel.value === 'auto' ? null : (shapeSel.value as FaceShape));
+  });
 
   const categorySel = document.createElement('select');
   for (const g of GROUPS) {
@@ -180,42 +251,40 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
     categorySel.append(og);
   }
   const finishSel = document.createElement('select');
+  const styleSel = select([
+    ['auto', 'Auto (best for face shape)'],
+    ...BLUSH_STYLE_NAMES.map((s): [string, string] => [s, STYLE_LABELS[s]]),
+  ]);
+  const concealerSel = select(
+    CONCEALER_TYPES.map((t): [string, string] => [t, CONCEALER_LABELS[t]]),
+  );
   const intensity = document.createElement('input');
   intensity.type = 'range';
   intensity.min = '0.15';
   intensity.max = '1';
   intensity.step = '0.05';
-  const toggle = document.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'btn';
 
-  field('Product', categorySel);
-  field('Finish', finishSel);
-  const styleSel = document.createElement('select');
-  const STYLE_LABELS: Record<BlushStyle, string> = {
-    lifted: 'Lifted (to temples)',
-    draped: 'Draped (cheekbone)',
-    sunkissed: 'Sun-kissed (over nose)',
-    apples: 'Apples (round)',
-  };
-  for (const st of BLUSH_STYLE_NAMES) {
-    const o = document.createElement('option');
-    o.value = st;
-    o.textContent = STYLE_LABELS[st];
-    styleSel.append(o);
-  }
-  const styleField = field('Style', styleSel);
-  field('Intensity', intensity);
-  field('Before / after', toggle);
+  field(grid, 'Product', categorySel);
+  const concealerField = field(grid, 'Type', concealerSel);
+  const styleField = field(grid, 'Style', styleSel);
+  field(grid, 'Finish', finishSel);
+  field(grid, 'Intensity', intensity);
 
-  const current = (): (Product & { shadeName: string }) | undefined => {
+  const shadesFor = (c: ProductCategory): Shade[] =>
+    c === 'concealer' ? CONCEALER_SHADES[concealerType] : SHADES[c];
+
+  const current = (): Applied | undefined => {
     const p = look.get(slotOf(category));
     return p && p.category === category ? p : undefined;
   };
 
+  const extras = (c: ProductCategory): Partial<Product> => ({
+    ...(c === 'blush' && blushStyle !== 'auto' && { style: blushStyle }),
+    ...(c === 'concealer' && { variant: concealerType }),
+  });
+
   const apply = (): void => {
-    view.setProducts(showMakeup ? [...look.values()] : []);
-    toggle.textContent = showMakeup ? 'Show without' : 'Show with';
+    view.setProducts([...look.values()]);
     renderChips();
   };
 
@@ -227,9 +296,8 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
       shadeName: s.name,
       finish: finishByCat.get(category) ?? (finishesFor(category)[0] as ProductFinish),
       intensity: intensityByCat.get(category) ?? 1,
-      ...(category === 'blush' && { style: blushStyle }),
+      ...extras(category),
     });
-    showMakeup = true;
     syncPanel();
     apply();
   };
@@ -239,12 +307,17 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
     if (!p) return;
     p.finish = finishByCat.get(category) ?? p.finish;
     p.intensity = intensityByCat.get(category) ?? p.intensity;
-    if (category === 'blush') p.style = blushStyle;
+    delete p.style;
+    Object.assign(p, extras(category));
     apply();
   };
 
   function syncPanel(): void {
     categorySel.value = category;
+    concealerField.hidden = category !== 'concealer';
+    styleField.hidden = category !== 'blush';
+    concealerSel.value = concealerType;
+    styleSel.value = blushStyle;
     finishSel.innerHTML = '';
     for (const f of finishesFor(category)) {
       const o = document.createElement('option');
@@ -254,12 +327,10 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
     }
     finishSel.value = finishByCat.get(category) ?? (finishesFor(category)[0] as ProductFinish);
     intensity.value = String(intensityByCat.get(category) ?? 1);
-    styleField.hidden = category !== 'blush';
-    styleSel.value = blushStyle;
     const cur = current();
     swatches.innerHTML = '';
     swatches.setAttribute('aria-label', `${LABELS[category]} shade`);
-    for (const s of SHADES[category]) {
+    for (const s of shadesFor(category)) {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'swatch';
@@ -278,7 +349,6 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
 
   function renderChips(): void {
     applied.innerHTML = '';
-    if (look.size === 0) return;
     for (const [slot, p] of look) {
       const chip = document.createElement('button');
       chip.type = 'button';
@@ -301,21 +371,24 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
     category = categorySel.value as ProductCategory;
     syncPanel();
   });
-  finishSel.addEventListener('change', () => {
-    finishByCat.set(category, finishSel.value as ProductFinish);
-    updateCurrent();
+  concealerSel.addEventListener('change', () => {
+    concealerType = concealerSel.value as ConcealerType;
+    // A different concealer type is a different product: cleared until a shade is picked.
+    if (current()) look.delete('concealer');
+    syncPanel();
+    apply();
   });
   styleSel.addEventListener('change', () => {
-    blushStyle = styleSel.value as BlushStyle;
+    blushStyle = styleSel.value as BlushStyle | 'auto';
+    updateCurrent();
+  });
+  finishSel.addEventListener('change', () => {
+    finishByCat.set(category, finishSel.value as ProductFinish);
     updateCurrent();
   });
   intensity.addEventListener('input', () => {
     intensityByCat.set(category, Number(intensity.value));
     updateCurrent();
-  });
-  toggle.addEventListener('click', () => {
-    showMakeup = !showMakeup;
-    apply();
   });
 
   // Start with a ruby lipstick so the camera shows something straight away (?fx=off: none).

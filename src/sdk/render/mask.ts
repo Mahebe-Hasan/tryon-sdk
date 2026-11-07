@@ -41,25 +41,44 @@ export function polylineTriangles(
   width: number,
   closed = false,
   roundSegments = 8,
+  widths?: readonly number[],
 ): number[] {
   const out: number[] = [];
-  const r = width / 2;
-  if (points.length === 0 || r <= 0) return out;
+  const rAt = (i: number): number => (widths?.[i] ?? width) / 2;
+  if (points.length === 0 || (width <= 0 && !widths)) return out;
   const n = points.length;
   const segs = closed ? n : n - 1;
   for (let i = 0; i < segs; i++) {
+    const j = (i + 1) % n;
     const a = points[i] as Vec2;
-    const b = points[(i + 1) % n] as Vec2;
+    const b = points[j] as Vec2;
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const len = Math.hypot(dx, dy);
     if (len < 1e-6) continue;
-    const nx = (-dy / len) * r;
-    const ny = (dx / len) * r;
-    out.push(a.x + nx, a.y + ny, b.x + nx, b.y + ny, b.x - nx, b.y - ny);
-    out.push(a.x + nx, a.y + ny, b.x - nx, b.y - ny, a.x - nx, a.y - ny);
+    const ux = -dy / len;
+    const uy = dx / len;
+    const ra = rAt(i);
+    const rb = rAt(j);
+    // Trapezoid: tapers smoothly when the widths differ.
+    out.push(
+      a.x + ux * ra,
+      a.y + uy * ra,
+      b.x + ux * rb,
+      b.y + uy * rb,
+      b.x - ux * rb,
+      b.y - uy * rb,
+    );
+    out.push(
+      a.x + ux * ra,
+      a.y + uy * ra,
+      b.x - ux * rb,
+      b.y - uy * rb,
+      a.x - ux * ra,
+      a.y - uy * ra,
+    );
   }
-  for (const p of points) out.push(...circleTriangles(p, r, roundSegments));
+  points.forEach((p, i) => out.push(...circleTriangles(p, rAt(i), roundSegments)));
   return out;
 }
 
@@ -87,7 +106,10 @@ export function shapeTriangles(shape: RegionShape): { fill: number[]; clip: numb
     case 'polygon':
       return { fill: polygonTriangles(shape.loops), clip: null };
     case 'polyline':
-      return { fill: polylineTriangles(shape.points, shape.width, shape.closed), clip: null };
+      return {
+        fill: polylineTriangles(shape.points, shape.width, shape.closed, 8, shape.widths),
+        clip: null,
+      };
     case 'circle':
       return {
         fill: circleTriangles(shape.center, shape.radius, 48),
@@ -109,7 +131,7 @@ export function shapeBBox(shape: RegionShape): BBox | null {
       for (const p of shape.loops[0] ?? []) add(p.x, p.y);
       break;
     case 'polyline':
-      for (const p of shape.points) add(p.x, p.y, shape.width / 2);
+      shape.points.forEach((p, i) => add(p.x, p.y, (shape.widths?.[i] ?? shape.width) / 2));
       break;
     case 'circle':
       add(shape.center.x, shape.center.y, shape.radius);

@@ -37,5 +37,9 @@ Option A: public GitHub repo, demo on GitHub Pages, SDK via jsDelivr. LICENSE is
 - Makeup rendering follows `docs/RENDERING_RESEARCH.md`. Never expose blend modes to
   shoppers: products are category + shade + finish + intensity, and `src/sdk/render/recipes.ts`
   maps them to rendering parameters. Base new categories on researched methods and real data.
+- Placement by face shape: `src/sdk/render/placements.ts`; face-shape detection:
+  `src/sdk/tracking/faceShape.ts` (calibrated on labelled faces; keep tests in sync).
+- Product colours show their true shade in all lighting (`RENDER_CONFIG.productSceneLight = 0`,
+  a product decision).
 - Face region index sets live in `src/sdk/tracking/regions.ts`; verify changes with
   `?debug=1&regions=1&ids=1`. "L"/"R" = the subject's left/right (MediaPipe convention).

@@ -152,6 +152,20 @@ allows up to 5 eyeshadow colours).
 - **Blush placement styles.** Lifted (apple → temple), draped (cheekbone → temple → outer brow), sun-kissed (cheeks + nose bridge) and apples. These are the common ways blush is worn; a round dot alone looks fake.
 - **Lower densities** for contour, bronzer, eyeshadow and highlighter. Shimmer only glints where light falls.
 
+**Face shape → placement (0.0.10).** The product owner supplied face-shape and placement charts (6 ways to wear blush; contour & highlight for 16 face shapes; contour/highlight/blush for round, oval and square; a round-face guide). MediaPipe's mesh is regularised, so measured shape differences are small: length/width 1.10–1.21 and jaw/cheek 0.75–0.85 across the labelled faces. Nearest-prototype classification on [length, forehead, jaw, jaw angle], centred on the measured population, got 14/15 usable labelled samples right. Placement tables are in `render/placements.ts`.
+
+| Shape    | Blush                   | Contour                         | Highlight                                   |
+| -------- | ----------------------- | ------------------------------- | ------------------------------------------- |
+| Oval     | lifted                  | cheek hollows, temples          | forehead, under-eye, nose, chin, cheekbones |
+| Round    | vertical (outer cheek)  | temples, sides of face, hollows | forehead, nose, chin, under-eye (vertical)  |
+| Square   | lifted                  | temples, hollows, jaw corners   | forehead, under-eye, nose, chin             |
+| Oblong   | sun-kissed (horizontal) | hairline, under chin, hollows   | cheekbones, under-eye, cupid's bow          |
+| Heart    | apples                  | temples, hollows                | chin, under-eye, nose, cheekbones           |
+| Diamond  | apples                  | hollows, sides of face          | forehead, chin, under-eye, nose             |
+| Triangle | draped                  | jaw, jaw corners, hollows       | forehead, cheekbones, under-eye, brow bone  |
+
+**Concealer colour theory.** Peach/orange cancels blue-purple (dark circles, bruises). Green cancels redness. Same shade covers unevenness. One shade lighter brightens the high points. Peach and cover concealers weight toward pixels darker than the zone's mean; green applies only where a* is above the face mean, so plain skin is untouched (synthetic check: plain skin ΔE 0; red patch a* 27 → ~13).
+
 **Application order** (build plan §5.4): foundation → skin tint → concealer → contour →
 bronzer → blush → highlighter → eyeshadow → lip liner → lip colour → gloss.
 

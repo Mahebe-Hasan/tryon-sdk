@@ -25,7 +25,8 @@ export type RegionShape =
   /** Filled with the even-odd rule, so later loops cut holes (e.g. inner lips, eyes). */
   | { kind: 'polygon'; loops: Vec2[][] }
   /** Stroke along points. `width` in pixels. */
-  | { kind: 'polyline'; points: Vec2[]; width: number; closed?: boolean }
+  /** Stroke along points. `width` in px; optional `widths` (one per point) tapers it. */
+  | { kind: 'polyline'; points: Vec2[]; width: number; widths?: number[]; closed?: boolean }
   /** `clip` (optional) limits the circle, e.g. iris inside the eyelid opening. */
   | { kind: 'circle'; center: Vec2; radius: number; clip?: Vec2[] };
 
@@ -77,7 +78,22 @@ export type RegionId =
   | 'blushLifted.L'
   | 'blushDraped.R'
   | 'blushDraped.L'
-  | 'blushSunkissed';
+  | 'blushSunkissed'
+  | 'blushVertical.R'
+  | 'blushVertical.L'
+  /** Face-shape contour / highlight / concealer zones (see FACE_SHAPE_PLACEMENTS). */
+  | 'contourTemple.R'
+  | 'contourTemple.L'
+  | 'contourHairline'
+  | 'contourSideFace.R'
+  | 'contourSideFace.L'
+  | 'contourJawCorner.R'
+  | 'contourJawCorner.L'
+  | 'contourUnderChin'
+  | 'highlightForehead'
+  | 'highlightUnderEye.R'
+  | 'highlightUnderEye.L'
+  | 'highlightChin';
 
 export type RegionGroup = 'lips' | 'skin' | 'cheeks' | 'contour' | 'highlight' | 'eyes' | 'brows';
 
@@ -186,6 +202,14 @@ const IDX = {
     innerCorner: 362,
   },
   noseBridge: [168, 6, 197, 195],
+  /** Face oval, subject's right side top → chin, and left side top → chin. */
+  ovalR: [109, 67, 103, 54, 21, 162, 127, 234, 93, 132, 58, 172, 136, 150, 149, 176, 148, 152],
+  ovalL: [338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152],
+  hairline: [67, 109, 10, 338, 297],
+  underChin: [149, 176, 148, 152, 377, 400, 378],
+  foreheadCenter: [9, 151, 10],
+  chinCenter: [200, 175],
+  faceCenter: 5,
   cupidsBow: [37, 0, 267],
   philtrum: 164,
   faceTop: 10,
@@ -237,6 +261,7 @@ export function computeRegions(
   const across = normalize(sub(P(IDX.faceSideL), P(IDX.faceSideR)));
   const bl = cfg.blush;
   const apple = (side: 'R' | 'L'): Vec2 => centroid(pts(IDX[side].cheekCenter));
+  const oval = (side: 'R' | 'L'): readonly number[] => (side === 'R' ? IDX.ovalR : IDX.ovalL);
 
   const lipLoops = LIP_LOOPS.map((l) => smoothClosed(pts(l), cfg.lipCurveSubdivisions)).sort(
     (a, b) => Math.abs(polygonArea(b)) - Math.abs(polygonArea(a)),
@@ -295,8 +320,52 @@ export function computeRegions(
         apple('L'),
       ],
       width: faceW * bl.sunkissedWidth,
+      // Full on the cheeks, a whisper over the nose.
+      widths: [1.3, 0.9, 0.55, 0.9, 1.3].map((k) => k * faceW * bl.sunkissedWidth),
     },
   });
+
+  // ---- Face-shape zones (tapered strokes → soft gradients after feathering) ----------
+  const fc = P(IDX.faceCenter);
+  const inset = (idx: readonly number[], k: number): Vec2[] => pts(idx).map((p) => lerp(p, fc, k));
+  const taper = (ks: number[], w: number): number[] => ks.map((k) => k * faceW * w);
+  regions.push(
+    {
+      id: 'contourHairline',
+      group: 'contour',
+      shape: {
+        kind: 'polyline',
+        points: inset(IDX.hairline, 0.05),
+        width: faceW * 0.05,
+        widths: taper([0.6, 1, 1, 1, 0.6], 0.05),
+      },
+    },
+    {
+      id: 'contourUnderChin',
+      group: 'contour',
+      shape: {
+        kind: 'polyline',
+        points: inset(IDX.underChin, 0.03),
+        width: faceW * 0.04,
+        widths: taper([0.5, 0.8, 1, 1, 1, 0.8, 0.5], 0.04),
+      },
+    },
+    {
+      id: 'highlightForehead',
+      group: 'highlight',
+      shape: {
+        kind: 'polyline',
+        points: [P(9), P(151), lerp(P(151), P(10), 0.6)],
+        width: faceW * 0.06,
+        widths: taper([0.45, 1, 0.7], 0.06),
+      },
+    },
+    {
+      id: 'highlightChin',
+      group: 'highlight',
+      shape: { kind: 'polyline', points: pts(IDX.chinCenter), width: faceW * 0.045 },
+    },
+  );
 
   for (const side of ['R', 'L'] as const) {
     const s = IDX[side];
@@ -342,6 +411,8 @@ export function computeRegions(
           kind: 'polyline',
           points: [ap, lerp(ap, temple, 0.5), lerp(ap, temple, 0.88)],
           width: faceW * bl.liftedWidth,
+          // Densest/widest on the cheekbone, thinning as it blends toward the temple.
+          widths: [1, 0.85, 0.45].map((k) => k * faceW * bl.liftedWidth),
         },
       },
       {
@@ -352,6 +423,60 @@ export function computeRegions(
           kind: 'polyline',
           points: [lerp(ap, temple, 0.35), temple, lerp(temple, P(s.browOuter), 0.55)],
           width: faceW * bl.drapedWidth,
+          widths: [0.8, 1, 0.5].map((k) => k * faceW * bl.drapedWidth),
+        },
+      },
+      {
+        // Round faces: a vertical sweep on the outer cheek elongates the face.
+        id: `blushVertical.${side}`,
+        group: 'cheeks',
+        shape: {
+          kind: 'polyline',
+          points: [
+            add(lerp(ap, P(side === 'R' ? 234 : 454), 0.42), scale(up, faceW * 0.05)),
+            sub(lerp(ap, P(side === 'R' ? 234 : 454), 0.45), scale(up, faceW * 0.09)),
+          ],
+          width: faceW * 0.055,
+          widths: taper([1, 0.55], 0.055),
+        },
+      },
+      {
+        id: `contourTemple.${side}`,
+        group: 'contour',
+        shape: {
+          kind: 'polyline',
+          points: inset(oval(side).slice(2, 6), 0.07),
+          width: faceW * 0.055,
+          widths: taper([0.5, 0.9, 1, 0.6], 0.055),
+        },
+      },
+      {
+        id: `contourSideFace.${side}`,
+        group: 'contour',
+        shape: {
+          kind: 'polyline',
+          points: inset(oval(side).slice(5, 10), 0.1),
+          width: faceW * 0.06,
+          widths: taper([0.4, 0.8, 1, 0.8, 0.4], 0.06),
+        },
+      },
+      {
+        id: `contourJawCorner.${side}`,
+        group: 'contour',
+        shape: {
+          kind: 'polyline',
+          points: inset(oval(side).slice(9, 13), 0.06),
+          width: faceW * 0.05,
+          widths: taper([0.5, 1, 1, 0.5], 0.05),
+        },
+      },
+      {
+        // Inverted triangle under the eye, pointing down toward the cheek (brighten zone).
+        id: `highlightUnderEye.${side}`,
+        group: 'highlight',
+        shape: {
+          kind: 'polygon',
+          loops: [[...pts(s.lowerRing1).slice(2, 7), lerp(centroid(pts(s.lowerLid)), ap, 0.8)]],
         },
       },
       {
@@ -371,7 +496,13 @@ export function computeRegions(
       {
         id: `contourCheek.${side}`,
         group: 'contour',
-        shape: { kind: 'polyline', points: pts(s.contourCheek), width: faceW * cfg.contourWidth },
+        shape: {
+          kind: 'polyline',
+          points: pts(s.contourCheek),
+          width: faceW * cfg.contourWidth,
+          // Deepest near the ear, fading toward the mouth (never a stripe).
+          widths: [1, 0.85, 0.55, 0.25].map((k) => k * faceW * cfg.contourWidth),
+        },
       },
       {
         id: `contourJaw.${side}`,

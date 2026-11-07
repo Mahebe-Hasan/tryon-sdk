@@ -187,6 +187,13 @@ startBtn.addEventListener('click', async () => {
   }
 });
 switchBtn.addEventListener('click', () => void view.switchCamera());
+const compareBtn = el<HTMLButtonElement>('compare');
+compareBtn.addEventListener('click', () => {
+  const on = !view.compareEnabled;
+  view.setCompare(on);
+  compareBtn.setAttribute('aria-pressed', String(on));
+  compareBtn.classList.toggle('on', on);
+});
 el('stop').addEventListener('click', () => view.stop());
 photoBtn.addEventListener('click', () => {
   alert('Photo mode arrives in Phase 7.');

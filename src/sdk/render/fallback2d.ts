@@ -1,7 +1,7 @@
 import type { RegionShape } from '../tracking/regions';
 import type { Vec2 } from '../tracking/paths';
 import { rgbToHex, type BlendMode } from './color';
-import type { RenderEffect, Renderer } from './types';
+import type { FrameInfo, RenderEffect, Renderer } from './types';
 
 const COMPOSITE: Record<BlendMode, GlobalCompositeOperation> = {
   normal: 'source-over',
@@ -53,8 +53,8 @@ export class Canvas2DRenderer implements Renderer {
     this.hasFrame = true;
   }
 
-  // FrameInfo (sparkle/detail inputs) is unused: the 2D fallback skips finishes.
-  render(effects: RenderEffect[]): void {
+  // Finishes/sparkle are skipped in 2D; only the compare split is used from FrameInfo.
+  render(effects: RenderEffect[], frame?: FrameInfo): void {
     if (!this.hasFrame) return;
     const width = this.canvas.width;
     const height = this.canvas.height;
@@ -97,6 +97,12 @@ export class Canvas2DRenderer implements Renderer {
     }
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
+    const cmp = frame?.compare;
+    if (cmp && cmp.split >= 0) {
+      const x = Math.round(cmp.split * width);
+      const [sx, sw] = cmp.beforeLow ? [0, x] : [x, width - x];
+      if (sw > 0) ctx.drawImage(this.frameCanvas, sx, 0, sw, height, sx, 0, sw, height);
+    }
   }
 
   destroy(): void {
@@ -124,7 +130,10 @@ function drawShape(ctx: CanvasRenderingContext2D, s: RegionShape): void {
       break;
     case 'polyline':
       trace(ctx, s.points, s.closed ?? false);
-      ctx.lineWidth = s.width;
+      // 2D canvas can't taper a stroke; use the mean width.
+      ctx.lineWidth = s.widths?.length
+        ? s.widths.reduce((a, b) => a + b, 0) / s.widths.length
+        : s.width;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.stroke();

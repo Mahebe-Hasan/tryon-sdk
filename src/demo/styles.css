@@ -145,6 +145,11 @@ h1 {
   font-size: 1.25rem;
 }
 
+.btn.round.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
 .controls {
   position: absolute;
   right: 12px;

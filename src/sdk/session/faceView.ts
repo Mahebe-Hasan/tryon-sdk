@@ -13,6 +13,8 @@ import { FaceTracker } from '../tracking/face';
 import { faceMetrics, lipGlossSpot } from '../tracking/metrics';
 import { Presence } from '../tracking/presence';
 import { SceneLight } from '../tracking/light';
+import { FaceShapeTracker, type FaceShape } from '../tracking/faceShape';
+import { CompareSlider } from './compare';
 import { computeRegions, type Region, type RegionId } from '../tracking/regions';
 import { LandmarkSmoother, type OneEuroParams, type Point3 } from '../tracking/smoothing';
 
@@ -63,6 +65,8 @@ export interface FaceViewEvents extends Record<string, unknown> {
   ready: { delegate: string; renderer: string };
   'tracking-lost': undefined;
   'tracking-found': undefined;
+  /** Face shape decided/changed (detected) or overridden; placements follow `active`. */
+  'face-shape': { detected: FaceShape | null; active: FaceShape; overridden: boolean };
   error: unknown;
 }
 
@@ -83,6 +87,10 @@ export class FaceView {
   private readonly smoother: LandmarkSmoother;
   private readonly presence: Presence;
   private readonly light = new SceneLight();
+  private readonly shapeTracker = new FaceShapeTracker();
+  private shapeOverride: FaceShape | null = null;
+  private products: Product[] | null = null;
+  private readonly compare: CompareSlider;
   private readonly stage: HTMLDivElement;
   private readonly mirror: HTMLDivElement;
   private readonly overlay: HTMLCanvasElement;
@@ -132,6 +140,8 @@ export class FaceView {
     this.mirror.append(this.camera.video, this.renderer.canvas, this.overlay);
     this.stage.append(this.mirror);
 
+    this.compare = new CompareSlider(this.stage);
+
     if (opts.debug) {
       this.hud = new DebugHud(this.toggles, this.smoother.params, {
         onToggle: (t) => (this.toggles = t),
@@ -167,7 +177,46 @@ export class FaceView {
    * intensity). Rendering and application order follow the product recipes.
    */
   setProducts(products: readonly Product[]): void {
-    this.setEffects(lookEffects(products));
+    this.products = [...products];
+    this.setEffects(lookEffects(this.products, this.faceShape));
+  }
+
+  /** Face shape used for placement: the override, else the detected shape, else oval. */
+  get faceShape(): FaceShape {
+    return this.shapeOverride ?? this.shapeTracker.shape ?? 'oval';
+  }
+
+  /** Detected face shape (null until enough frontal frames have been seen). */
+  get detectedFaceShape(): FaceShape | null {
+    return this.shapeTracker.shape;
+  }
+
+  /** Override the detected face shape (null = back to automatic). */
+  setFaceShape(shape: FaceShape | null): void {
+    this.shapeOverride = shape;
+    this.reapplyProducts();
+    this.emitShape();
+  }
+
+  /** Show/hide the before/after slider (left of the line = before, right = after). */
+  setCompare(enabled: boolean): void {
+    this.compare.setEnabled(enabled);
+  }
+
+  get compareEnabled(): boolean {
+    return this.compare.enabled;
+  }
+
+  private reapplyProducts(): void {
+    if (this.products) this.setEffects(lookEffects(this.products, this.faceShape));
+  }
+
+  private emitShape(): void {
+    this.events.emit('face-shape', {
+      detected: this.shapeTracker.shape,
+      active: this.faceShape,
+      overridden: this.shapeOverride !== null,
+    });
   }
 
   /** @deprecated use setProducts */
@@ -342,6 +391,10 @@ export class FaceView {
     const needRegions = lm && (this.effects.length > 0 || (this.hud && this.toggles.regions));
     const regions = needRegions ? computeRegions(lm, w, h) : [];
     const metrics = lm ? faceMetrics(lm, w, h) : null;
+    if (result && lm && metrics && this.shapeTracker.update(lm, w, h, metrics.roll)) {
+      if (!this.shapeOverride) this.reapplyProducts();
+      this.emitShape();
+    }
 
     const renderEffects =
       metrics && lm ? this.buildEffects(regions, metrics.width, opacity, lm, w, h) : [];
@@ -351,6 +404,9 @@ export class FaceView {
       faceWidth: metrics?.width ?? 0,
       faceTransform: metrics?.transform ?? null,
       illuminant: this.light.gain,
+      ...(this.compare.enabled && {
+        compare: this.compare.toCanvas(this.stage, w, h, this.camera.mirrored),
+      }),
     });
 
     if (this.hud) {

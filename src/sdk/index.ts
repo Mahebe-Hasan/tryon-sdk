@@ -5,7 +5,7 @@
  * blocks below are exported for the demo and for testing.
  */
 
-export const VERSION = '0.0.9';
+export const VERSION = '0.0.10';
 
 export const PRIVACY_STATEMENT =
   'Your camera stays on your device. The try-on runs entirely in your browser — no images or video are uploaded, stored, or shared.';
@@ -79,6 +79,21 @@ export {
   type ProductCategory,
   type ProductFinish,
 } from './session/products';
+export {
+  FACE_SHAPE_PLACEMENTS,
+  CONCEALER_TYPES,
+  CONCEALER_RECIPES,
+  type Placement,
+  type ConcealerType,
+} from './render/placements';
+export {
+  FACE_SHAPES,
+  FACE_SHAPE_CONFIG,
+  classifyFaceShape,
+  faceShapeFeatures,
+  type FaceShape,
+  type FaceShapeFeatures,
+} from './tracking/faceShape';
 export {
   EYESHADOW_RECIPE,
   BLUSH_STYLES,

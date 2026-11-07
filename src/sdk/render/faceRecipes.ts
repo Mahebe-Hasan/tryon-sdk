@@ -85,6 +85,8 @@ export type FaceRecipe =
       finishes: readonly FaceFinish[];
       /** Cut these out with a crisp edge after feathering (e.g. the eyes). */
       erase?: RegionId[];
+      /** Apply mainly where skin is darker ('dark') or redder ('red') than its surroundings. */
+      target?: 'dark' | 'red';
     }
   | {
       technique: 'layer';
@@ -218,6 +220,7 @@ export const BLUSH_STYLES = {
   draped: ['blushDraped.R', 'blushDraped.L'],
   sunkissed: ['blushSunkissed'],
   apples: ['blushApples.R', 'blushApples.L'],
+  vertical: ['blushVertical.R', 'blushVertical.L'],
 } as const satisfies Record<string, readonly RegionId[]>;
 export type BlushStyle = keyof typeof BLUSH_STYLES;
 export const BLUSH_STYLE_NAMES = Object.keys(BLUSH_STYLES) as BlushStyle[];
@@ -263,6 +266,7 @@ export function facePigmentParams(
     shift: r.shift * intensity,
     smooth: r.smooth * intensity,
     skinOnly: 1,
+    target: r.target === 'dark' ? 1 : r.target === 'red' ? 2 : 0,
   };
 }
 

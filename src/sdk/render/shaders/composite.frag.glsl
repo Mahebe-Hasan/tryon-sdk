@@ -54,6 +54,8 @@ uniform float u_smooth;     // fine-detail softening (foundation fills fine line
 // 0–1: apply only to skin. Pixels far darker than the region's skin mean (beard, stubble,
 // nostrils, hair) get less product; ordinary shading (side of face) is within the margin.
 uniform float u_skinOnly;
+// Concealer targeting: 0 none, 1 darker-than-surroundings spots, 2 redder-than-average spots.
+uniform int u_target;
 
 // Thin layer (blush, bronzer, contour, eyeshadow, highlighter)
 uniform vec3 u_productLin;  // product colour lit by the scene, linear RGB
@@ -121,6 +123,8 @@ void main() {
     // 2. Region mean of the diffuse colour (mask-weighted, from the stats mip).
     vec3 mu = regionMeanLab(lab);
     m *= skinWeight(lab.x, mu.x);
+    if (u_target == 1) m *= 0.3 + 0.7 * smoothstep(0.5, 7.0, mu.x - lab.x);
+    else if (u_target == 2) m *= smoothstep(2.0, 7.0, lab.y - mu.y);
     // 3. Shift the mean to the product colour, keep kL/kC of each pixel's own variation.
     vec3 tgt = mix(mu, u_productLab, u_shift);
     tgt.x += u_lightAdapt * clamp(mu.x - u_refL, -12.0, 12.0);

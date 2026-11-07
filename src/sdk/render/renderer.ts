@@ -152,7 +152,13 @@ export class WebGLRenderer implements Renderer {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, src);
     gl.uniform1i(p.loc('u_tex'), 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
+    gl.uniform1i(p.loc('u_before'), 1);
+    gl.uniform1f(p.loc('u_split'), frame.compare ? frame.compare.split : -1);
+    gl.uniform1i(p.loc('u_beforeLow'), frame.compare?.beforeLow === false ? 0 : 1);
     this.drawQuad();
+    gl.activeTexture(gl.TEXTURE0);
   }
 
   destroy(): void {
@@ -347,7 +353,9 @@ export class WebGLRenderer implements Renderer {
     gl.uniform1f(p.loc('u_sparkle'), pg ? pg.sparkle : ly ? ly.sparkle : f.sparkle);
     gl.uniform1f(p.loc('u_metal'), f.metal);
     // Light the product like the face: daylight shade × scene illuminant (linear RGB).
-    const ill = frame.illuminant ?? [1, 1, 1];
+    // Product colours stay true in every light by default (productSceneLight = 0).
+    const k = RENDER_CONFIG.productSceneLight;
+    const ill = (frame.illuminant ?? [1, 1, 1]).map((g) => 1 + (g - 1) * k);
     const litLin = fx.color.map((c, i) => Math.min(1, srgbToLinear(c) * (ill[i] as number))) as RGB;
     if (ly) {
       gl.uniform3f(p.loc('u_productLin'), litLin[0], litLin[1], litLin[2]);
@@ -366,6 +374,7 @@ export class WebGLRenderer implements Renderer {
       gl.uniform1f(p.loc('u_shift'), pg.shift);
       gl.uniform1f(p.loc('u_smooth'), pg.smooth);
       gl.uniform1f(p.loc('u_skinOnly'), pg.skinOnly);
+      gl.uniform1i(p.loc('u_target'), pg.target);
       gl.uniform1f(p.loc('u_roughness'), pg.roughness);
       gl.uniform1f(p.loc('u_specScale'), pg.specScale);
       gl.uniform1f(p.loc('u_specTint'), pg.specTint);

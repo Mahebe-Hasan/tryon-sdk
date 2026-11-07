@@ -67,6 +67,12 @@ export const RENDER_CONFIG = {
    * which is why lip light adaptation is kept weak and capped at ±12 L*.
    */
   pigmentReferenceL: 50,
+  /**
+   * How much product colours follow the measured room light (0–1). 0 (product decision):
+   * every product shows its true shade in any light; texture and shading still come from the
+   * real image. 1 = physically lit like the face (darker/warmer in dim/warm rooms).
+   */
+  productSceneLight: 0,
   /** Minimum mask blur (in mask texels) so every edge is anti-aliased. */
   minFeatherTexels: 0.8,
   /** Sparkle cells per face width. */
@@ -118,6 +124,11 @@ export interface FrameInfo {
    * Omitted = [1, 1, 1].
    */
   illuminant?: RGB;
+  /**
+   * Before/after compare: `split` is the canvas x (0–1) of the divider; the untouched frame is
+   * shown below it (`beforeLow`, default) or above it. Omitted = no compare.
+   */
+  compare?: { split: number; beforeLow: boolean };
 }
 
 export type RendererKind = 'webgl2' | 'canvas2d';

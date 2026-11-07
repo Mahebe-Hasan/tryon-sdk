@@ -19,6 +19,8 @@ import {
   type FaceFinish,
 } from '../render/faceRecipes';
 import type { EffectSpec } from './faceView';
+import { CONCEALER_RECIPES, FACE_SHAPE_PLACEMENTS, type ConcealerType } from '../render/placements';
+import type { FaceShape } from '../tracking/faceShape';
 
 export type ProductCategory = LipCategory | FaceCategory;
 export type ProductFinish = LipFinish | FaceFinish;
@@ -33,8 +35,10 @@ export interface Product {
   finish?: ProductFinish;
   /** 0–1 shopper intensity slider (how heavily it is applied). Default 1. */
   intensity?: number;
-  /** Blush only: how it is worn (lifted, draped, sunkissed, apples). Default lifted. */
+  /** Blush only: how it is worn. Default: the best style for the detected face shape. */
   style?: BlushStyle;
+  /** Concealer only: cover (default), brighten, peach or green corrector. */
+  variant?: ConcealerType;
   /** Eyeshadow only: up to three tones. Without it, `color` goes on lid + a softer crease. */
   tones?: { lid?: string; crease?: string; outer?: string };
 }
@@ -81,7 +85,12 @@ export function finishesFor(c: ProductCategory): readonly ProductFinish[] {
 const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
 
 /** Turn one product into render effects (eyeshadow can produce up to three). */
-export function productEffects(p: Product): EffectSpec[] {
+/**
+ * Turn one product into render effects (eyeshadow can produce up to three). Blush, contour,
+ * bronzer and highlighter are placed for `faceShape` (FACE_SHAPE_PLACEMENTS).
+ */
+export function productEffects(p: Product, faceShape: FaceShape = 'oval'): EffectSpec[] {
+  const placement = FACE_SHAPE_PLACEMENTS[faceShape];
   const intensity = clamp01(p.intensity ?? 1);
   const allowed = finishesFor(p.category);
   const finish = p.finish && allowed.includes(p.finish) ? p.finish : (allowed[0] as ProductFinish);
@@ -136,7 +145,8 @@ export function productEffects(p: Product): EffectSpec[] {
       }));
   }
 
-  const r = FACE_RECIPES[p.category];
+  const r =
+    p.category === 'concealer' ? CONCEALER_RECIPES[p.variant ?? 'cover'] : FACE_RECIPES[p.category];
   if (r.technique === 'pigment') {
     return [
       {
@@ -156,10 +166,7 @@ export function productEffects(p: Product): EffectSpec[] {
   return [
     {
       id: p.id,
-      regions:
-        p.category === 'blush' && p.style && p.style in BLUSH_STYLES
-          ? [...BLUSH_STYLES[p.style]]
-          : r.regions,
+      regions: placedRegions(p, placement, r.regions),
       color: p.color,
       blend: 'layer',
       finish: 'satin',
@@ -172,13 +179,35 @@ export function productEffects(p: Product): EffectSpec[] {
   ];
 }
 
-/** Effects for a full look, in application order. Later products of a category win ties. */
-export function lookEffects(products: readonly Product[]): EffectSpec[] {
+function placedRegions(
+  p: Product,
+  placement: (typeof FACE_SHAPE_PLACEMENTS)[FaceShape],
+  fallback: EffectSpec['regions'],
+): EffectSpec['regions'] {
+  switch (p.category) {
+    case 'blush':
+      return [...BLUSH_STYLES[p.style && p.style in BLUSH_STYLES ? p.style : placement.blush]];
+    case 'contour':
+      return placement.contour;
+    case 'bronzer':
+      return placement.bronzer;
+    case 'highlighter':
+      return placement.highlighter;
+    default:
+      return fallback;
+  }
+}
+
+/** Effects for a full look, in application order, placed for the face shape. */
+export function lookEffects(
+  products: readonly Product[],
+  faceShape: FaceShape = 'oval',
+): EffectSpec[] {
   const order = (c: ProductCategory): number => DRAW_ORDER.indexOf(c);
   return [...products]
     .map((p, i) => ({ p, i }))
     .sort((a, b) => order(a.p.category) - order(b.p.category) || a.i - b.i)
-    .flatMap(({ p }) => productEffects(p));
+    .flatMap(({ p }) => productEffects(p, faceShape));
 }
 
 /** Single lip product → its effect (kept for compatibility). */
