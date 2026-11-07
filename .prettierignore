@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-demo/
+coverage/
+public/wasm/
+public/models/
+package-lock.json
+virtual-tryon-build-plan.md
