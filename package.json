@@ -1,6 +1,6 @@
 {
   "name": "tryon-sdk",
-  "version": "0.0.10",
+  "version": "0.1.0",
   "private": true,
   "description": "Browser-based, real-time virtual try-on for makeup and press-on nails.",
   "license": "SEE LICENSE IN LICENSE",

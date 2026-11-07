@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.0] — 2026-11-08 — First embeddable release (Lushé integration)
+
+- Version 0.1.0 for self-hosting on a shop: `dist/tryon.esm.js` + `dist/models/` + `dist/wasm/`
+  (+ `dist/types/`). The first integration is lushe.beauty product pages (Try it on).
+
 ## [0.0.10] — 2026-11-08 — Face-shape placement, concealer types, true shades, compare slider
 
 - **Face-shape detection** (`tracking/faceShape.ts`): oval, round, square, oblong, heart,
