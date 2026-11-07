@@ -39,6 +39,7 @@ export class WebGLRenderer implements Renderer {
   private blur: Target | null = null;
   private w = 0;
   private h = 0;
+  private hasFrame = false;
   private mw = 0;
   private mh = 0;
 
@@ -101,20 +102,23 @@ export class WebGLRenderer implements Renderer {
     }
   }
 
-  render(
-    source: TexImageSource,
-    width: number,
-    height: number,
-    effects: RenderEffect[],
-    frame: FrameInfo,
-  ): void {
+  captureFrame(source: TexImageSource, width: number, height: number): void {
     if (this.lost || width <= 0 || height <= 0) return;
     const gl = this.gl;
     this.resize(width, height);
-
+    // texImage2D copies the frame that is current *now*, on the GPU.
     gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    this.hasFrame = true;
+  }
+
+  render(effects: RenderEffect[], frame: FrameInfo): void {
+    if (this.lost || !this.hasFrame) return;
+    const gl = this.gl;
+    const width = this.w;
+    const height = this.h;
+    gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
     gl.generateMipmap(gl.TEXTURE_2D);
     const maxLod = Math.floor(Math.log2(Math.max(width, height)));
 

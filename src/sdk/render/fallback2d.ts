@@ -26,30 +26,39 @@ export class Canvas2DRenderer implements Renderer {
   private readonly fxCanvas = document.createElement('canvas');
   private readonly fxCtx: CanvasRenderingContext2D;
 
+  /** Snapshot of the camera frame the landmarks were detected on. */
+  private readonly frameCanvas = document.createElement('canvas');
+  private readonly frameCtx: CanvasRenderingContext2D;
+  private hasFrame = false;
+
   constructor() {
+    this.frameCtx = get2d(this.frameCanvas);
     this.ctx = get2d(this.canvas);
     this.maskCtx = get2d(this.maskCanvas);
     this.fxCtx = get2d(this.fxCanvas);
   }
 
-  render(
-    source: TexImageSource,
-    width: number,
-    height: number,
-    effects: RenderEffect[],
-    // FrameInfo (sparkle/detail inputs) is unused: the 2D fallback skips finishes.
-  ): void {
+  captureFrame(source: TexImageSource, width: number, height: number): void {
     if (width <= 0 || height <= 0) return;
-    for (const c of [this.canvas, this.fxCanvas]) {
+    for (const c of [this.canvas, this.fxCanvas, this.frameCanvas]) {
       if (c.width !== width || c.height !== height) {
         c.width = width;
         c.height = height;
       }
     }
+    this.frameCtx.drawImage(source as CanvasImageSource, 0, 0, width, height);
+    this.hasFrame = true;
+  }
+
+  // FrameInfo (sparkle/detail inputs) is unused: the 2D fallback skips finishes.
+  render(effects: RenderEffect[]): void {
+    if (!this.hasFrame) return;
+    const width = this.canvas.width;
+    const height = this.canvas.height;
     const ctx = this.ctx;
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    ctx.drawImage(source as CanvasImageSource, 0, 0, width, height);
+    ctx.drawImage(this.frameCanvas, 0, 0);
 
     for (const fx of effects) {
       if (fx.opacity <= 0.003 || fx.shapes.length === 0) continue;

@@ -85,13 +85,13 @@ export type RendererKind = 'webgl2' | 'canvas2d';
 export interface Renderer {
   readonly kind: RendererKind;
   readonly canvas: HTMLCanvasElement;
-  /** Draw `source` with `effects` applied into `canvas` (resized to the source). */
-  render(
-    source: TexImageSource,
-    width: number,
-    height: number,
-    effects: RenderEffect[],
-    frame: FrameInfo,
-  ): void;
+  /**
+   * Snapshot the current camera frame. Call this immediately before running detection on
+   * the same source, so the makeup is drawn on exactly the frame the landmarks came from
+   * (otherwise the video can advance during detection and the makeup trails by a frame).
+   */
+  captureFrame(source: TexImageSource, width: number, height: number): void;
+  /** Draw the captured frame with `effects` applied into `canvas`. */
+  render(effects: RenderEffect[], frame: FrameInfo): void;
   destroy(): void;
 }

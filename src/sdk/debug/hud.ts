@@ -65,8 +65,9 @@ export class DebugHud {
     el.append(row);
 
     el.append(
-      this.slider('minCutoff', smoothing.minCutoff, 0.05, 5, 0.05),
-      this.slider('beta', smoothing.beta, 0, 100, 1),
+      this.slider('minCutoff', smoothing.minCutoff, 0.05, 10, 0.05),
+      this.slider('beta', smoothing.beta, 0, 400, 5),
+      this.slider('dCutoff', smoothing.dCutoff, 0.5, 10, 0.5),
     );
     this.el = el;
   }

@@ -66,6 +66,7 @@ const view = new FaceView({
   smoothing: {
     ...(num('minCutoff') !== undefined && { minCutoff: num('minCutoff') }),
     ...(num('beta') !== undefined && { beta: num('beta') }),
+    ...(num('dCutoff') !== undefined && { dCutoff: num('dCutoff') }),
   },
   ...(num('detect') !== undefined && { detectMaxSize: num('detect') }),
   renderer: params.get('renderer') === '2d' ? 'canvas2d' : 'auto',

@@ -274,7 +274,12 @@ export class FaceView {
     if (!tracker || !this.camera.isActive || video.readyState < 2) return;
     this.checkRenderer();
     const now = performance.now();
+    const w = video.videoWidth;
+    const h = video.videoHeight;
 
+    // Snapshot first, detect second: both read the same camera frame, so the makeup is
+    // drawn on exactly the image its landmarks came from (no one-frame trail).
+    this.renderer.captureFrame(video, w, h);
     const t0 = performance.now();
     const result = tracker.detect(video, now);
     const t1 = performance.now();
@@ -295,8 +300,6 @@ export class FaceView {
       this.events.emit(tracked ? 'tracking-found' : 'tracking-lost', undefined);
     }
 
-    const w = video.videoWidth;
-    const h = video.videoHeight;
     const lm = this.lastLandmarks;
     const needRegions = lm && (this.effects.length > 0 || (this.hud && this.toggles.regions));
     const regions = needRegions ? computeRegions(lm, w, h) : [];
@@ -304,7 +307,7 @@ export class FaceView {
 
     const renderEffects = metrics ? this.buildEffects(regions, metrics.width, opacity) : [];
     if (this.renderer.canvas.style.visibility) this.renderer.canvas.style.visibility = '';
-    this.renderer.render(video, w, h, renderEffects, {
+    this.renderer.render(renderEffects, {
       time: (now - this.t0) / 1000,
       faceWidth: metrics?.width ?? 0,
       faceTransform: metrics?.transform ?? null,

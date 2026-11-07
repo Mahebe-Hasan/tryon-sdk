@@ -10,8 +10,13 @@ export interface OneEuroParams {
   dCutoff: number;
 }
 
-/** Defaults tuned for normalised (0–1) landmark coordinates. */
-export const DEFAULT_ONE_EURO: OneEuroParams = { minCutoff: 1.5, beta: 20, dCutoff: 1 };
+/**
+ * Defaults tuned for normalised (0–1) landmark coordinates. Makeup must stick to the lips,
+ * so these favour low lag: in simulation a fast mouth opening trails by ~5% of the movement
+ * (vs 25% with the earlier 1.5/20/1) while still removing ~30% of still-face jitter.
+ * See tests/unit/smoothing.test.ts.
+ */
+export const DEFAULT_ONE_EURO: OneEuroParams = { minCutoff: 1.5, beta: 150, dCutoff: 4 };
 
 function alpha(cutoff: number, dt: number): number {
   const tau = 1 / (2 * Math.PI * cutoff);

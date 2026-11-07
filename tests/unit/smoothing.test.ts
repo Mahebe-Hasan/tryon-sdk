@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { LandmarkSmoother, OneEuroFilter } from '../../src/sdk/tracking/smoothing';
+import {
+  DEFAULT_ONE_EURO,
+  LandmarkSmoother,
+  OneEuroFilter,
+} from '../../src/sdk/tracking/smoothing';
 import { Presence } from '../../src/sdk/tracking/presence';
 
 describe('OneEuroFilter', () => {
@@ -32,6 +36,43 @@ describe('OneEuroFilter', () => {
     const f = new OneEuroFilter();
     f.filter(1, 1);
     expect(f.filter(5, 1)).toBe(1);
+  });
+});
+
+describe('DEFAULT_ONE_EURO keeps makeup attached to fast lip motion', () => {
+  // Lip point: detector noise while still, then the mouth opens 0.04 (frame units) in 120 ms.
+  const simulate = (fps: number) => {
+    let seed = 7;
+    const rnd = (): number => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    const gauss = (): number =>
+      Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+    const truth = (t: number): number => 0.5 + 0.04 * Math.min(1, Math.max(0, (t - 1) / 0.12));
+    const f = new OneEuroFilter(DEFAULT_ONE_EURO);
+    let jitter = 0;
+    let rawJitter = 0;
+    let n = 0;
+    let maxLag = 0;
+    for (let i = 0; i < fps * 1.6; i++) {
+      const t = i / fps;
+      const noisy = truth(t) + 0.0012 * gauss();
+      const out = f.filter(noisy, t);
+      if (t > 0.3 && t < 0.95) {
+        jitter += (out - truth(t)) ** 2;
+        rawJitter += (noisy - truth(t)) ** 2;
+        n++;
+      }
+      if (t >= 1 && t < 1.4) maxLag = Math.max(maxLag, Math.abs(out - truth(t)));
+    }
+    return { lagPct: (maxLag / 0.04) * 100, jitterRatio: Math.sqrt(jitter / n / (rawJitter / n)) };
+  };
+
+  it.each([30, 20])('at %i fps: trails < 10%% of the movement and still reduces jitter', (fps) => {
+    const { lagPct, jitterRatio } = simulate(fps);
+    expect(lagPct).toBeLessThan(10);
+    expect(jitterRatio).toBeLessThan(0.85);
   });
 });
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.0.4] — 2026-11-07 — Phase 2 fix: makeup sticks to moving lips
+
+- **Same-frame rendering:** the renderer now snapshots the camera frame (`captureFrame`)
+  immediately before detection runs on it, then draws the makeup on that snapshot. Before,
+  the video could advance to the next frame during detection, so makeup was drawn on a
+  newer image than its landmarks and trailed the lips by a frame.
+- **Lower-lag smoothing:** One Euro defaults changed from minCutoff 1.5 / beta 20 / dCutoff 1
+  to 1.5 / 150 / 4. In simulation a fast mouth opening trailed by up to 25% of the movement;
+  now ~5%, while still removing ~30% of still-face jitter. Locked in by unit tests.
+- Debug HUD: `dCutoff` slider added and `beta` range widened (0–400); `?dCutoff=` URL param.
+
 ## [0.0.3] — 2026-11-07 — Phase 2: Render engine
 
 - WebGL2 pipeline (`src/sdk/render/renderer.ts`): video uploaded as a mipmapped texture;
