@@ -30,7 +30,43 @@ over the region is what made our first version look like a sticker.
 | [Banuba TINT](https://www.banuba.com/tint-makeup-virtual-try-on)                                                                                                                                                     | Finishes per category (lipstick: matte/glossy/satin, foundation: matte/natural, eyeliner and eyeshadow: matte/satin). Lighting adaptation for blush.                                                                                                                                                                                                                                                                   |
 | [Li, Zhou, Lin, CVPR 2015](https://openaccess.thecvf.com/content_cvpr_2015/html/Li_Simulating_Makeup_Through_2015_CVPR_paper.html)                                                                                   | Makeup changes the albedo, diffuse shading and specular layers _differently_. Manipulate each layer with Kubelka-Munk (colour) and Torrance-Sparrow (shine). (Abstract only. The full text was blocked.)                                                                                                                                                                                                               |
 | Coloured lenses: [Perfect Corp lens API](https://yce.perfectcorp.com/ai-api/products/ai-eye-color-lens-virtual-try-on-api), [Tencent Beauty AR](https://trtc.io/blog/details/try-on-contact-lens), US patent 6508553 | Lenses are **semi-transparent**: blend the pattern with the natural iris, keep catchlight reflections, add a limbal ring, use an elliptical boundary, and let the eyelids cover it.                                                                                                                                                                                                                                    |
+| Sclera as white reference ([Choi et al. 2017](https://library.imaging.org/ei/articles/29/17/art00032))                                                                                                               | Measured sclera sRGB [0.70, 0.59, 0.54]; brightest-region selection; von Kries correction; as accurate as a colour checker. Used for scene light.                                                                                                                                                                                                                                                                      |
 | Lip colour diversity ([Vergnaud et al. 2024](https://pubmed.ncbi.nlm.nih.gov/38924896/), [QIMA 2023](https://qima-lifesciences.com/cosmetic_publication/lip-color-measurement-a-new-hyperspectral-imaging-device/))  | Natural lip lightness and chroma vary a lot within and across ethnicities. **Don't infer room lighting from lip brightness.** So lip light adaptation stays weak and capped.                                                                                                                                                                                                                                           |
+
+## Scene light: lighting the product like the face (implemented)
+
+**Problem found in testing.** The Shiseido/LipAT method sets the lips' mean to the product
+colour _as specified_. That works on well-lit, colour-balanced photos, but in a dim or warm
+room the lipstick stays at daylight brightness and "glows" like a screen/overlay layer, while
+a real lipstick would reflect the dim light like the skin around it.
+
+**Fix: a physical light model.** The observed colour is reflectance × scene light, per channel
+in linear RGB. So the product's daylight colour is multiplied by the scene light _before_ the
+pigment transfer.
+
+**Measuring the light without skin-tone bias.** Skin and lip lightness vary too much between
+people to act as a light meter. The sclera (white of the eye) is melanin-free and nearly
+constant. [Choi et al., "The human sclera and pupil as the calibration targets", Electronic
+Imaging 2017](https://library.imaging.org/ei/articles/29/17/art00032):
+
+- They calibrated photos with a colour checker and measured the sclera as **sRGB [0.70, 0.59,
+  0.54]**. It is warm, not pure white. (Pupil [0.19, 0.15, 0.14].)
+- Sclera pixels are segmented inside the eye shape, and the **brightest region** is used,
+  which avoids vessels, dark spots and eyelid shadow.
+- They apply a von Kries (per-channel) correction.
+- The result was as accurate as a 24-patch colour checker: ΔE 9.13 vs 9.25.
+
+Implementation (`tracking/light.ts`):
+
+- Every 4 frames, sample both eyes inside the eye polygon, excluding the iris (and limbus) and clipped glare.
+- Average the brightest 35% in linear light. The gain is that average divided by the reference sclera.
+- Limit white balance to ±25% around the overall exposure, so a reddish sclera can't tint the light.
+- Clamp the overall gain to 0.15–1.6, skip frames while blinking, and smooth over about 0.6 s.
+
+**Measured (GPU, synthetic dim warm room at [0.42, 0.38, 0.30]):**
+
+- The estimate was [0.419, 0.381, 0.307].
+- Lip colour vs a physically lit real lipstick: **ΔE 21 before, ΔE 1.0 now.**
 
 ## Lips (implemented, Phase 3)
 

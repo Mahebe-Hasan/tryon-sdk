@@ -10,6 +10,8 @@ export interface HudStats {
   tracked: boolean;
   opacity: number;
   blendshapes: Record<string, number>;
+  /** Scene light estimate (from the sclera). */
+  light?: string;
 }
 
 export interface HudToggles {
@@ -79,7 +81,7 @@ export class DebugHud {
     this.statsEl.textContent =
       `fps ${s.fps.toFixed(0)}  detect ${s.detectMs.toFixed(1)}ms  draw ${s.renderMs.toFixed(1)}ms\n` +
       `${s.delegate}  video ${s.videoSize}  detect ${s.detectSize}\n` +
-      `face ${s.tracked ? 'yes' : 'no'}  fade ${s.opacity.toFixed(2)}\n${bs}`;
+      `face ${s.tracked ? 'yes' : 'no'}  fade ${s.opacity.toFixed(2)}\n${s.light ?? ''}\n${bs}`;
   }
 
   private slider(

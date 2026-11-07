@@ -6,7 +6,7 @@ import compositeFrag from './shaders/composite.frag.glsl?raw';
 import blitFrag from './shaders/blit.frag.glsl?raw';
 import statsFrag from './shaders/stats.frag.glsl?raw';
 import { withIncludes } from './blend';
-import { blendModeIndex, rgbToLab } from './color';
+import { blendModeIndex, linearToSrgb, rgbToLab, srgbToLinear, type RGB } from './color';
 import { shapeBBox, shapeTriangles, unionBBox } from './mask';
 import {
   FINISH_PRESETS,
@@ -310,7 +310,12 @@ export class WebGLRenderer implements Renderer {
     gl.uniform1f(p.loc('u_sparkle'), pg ? pg.sparkle : f.sparkle);
     gl.uniform1f(p.loc('u_metal'), f.metal);
     if (pg) {
-      const lab = rgbToLab(fx.color);
+      // Light the product like the face: daylight shade × scene illuminant (linear RGB).
+      const ill = frame.illuminant ?? [1, 1, 1];
+      const lit = fx.color.map((c, i) =>
+        linearToSrgb(Math.min(1, srgbToLinear(c) * (ill[i] as number))),
+      ) as RGB;
+      const lab = rgbToLab(lit);
       gl.uniform3f(p.loc('u_productLab'), lab[0], lab[1], lab[2]);
       gl.uniform1f(p.loc('u_kL'), pg.kL);
       gl.uniform1f(p.loc('u_kC'), pg.kC);

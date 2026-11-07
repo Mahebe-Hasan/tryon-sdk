@@ -186,8 +186,12 @@ export const LIP_RECIPES: Record<LipCategory, LipRecipe> = {
   },
 };
 
-/** Low by default: LipAT applies the exact shade regardless of scene light and scored best. */
-export const LIP_LIGHT_ADAPT = 0.25;
+/**
+ * Extra brightness adaptation from the lips themselves. 0: scene light is handled physically
+ * by the sclera-based illuminant (tracking/light.ts), and lip lightness varies too much
+ * between people to be a light meter.
+ */
+export const LIP_LIGHT_ADAPT = 0;
 
 export function pigmentParams(category: LipCategory, finish: LipFinish): PigmentParams {
   const r = LIP_RECIPES[category];

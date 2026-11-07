@@ -11,6 +11,7 @@ import { lipProductEffect, type LipProduct } from './products';
 import { FaceTracker } from '../tracking/face';
 import { faceMetrics, lipGlossSpot } from '../tracking/metrics';
 import { Presence } from '../tracking/presence';
+import { SceneLight } from '../tracking/light';
 import { computeRegions, type Region, type RegionId } from '../tracking/regions';
 import { LandmarkSmoother, type OneEuroParams, type Point3 } from '../tracking/smoothing';
 
@@ -76,6 +77,7 @@ export class FaceView {
   private trackerPromise: Promise<FaceTracker> | null = null;
   private readonly smoother: LandmarkSmoother;
   private readonly presence: Presence;
+  private readonly light = new SceneLight();
   private readonly stage: HTMLDivElement;
   private readonly mirror: HTMLDivElement;
   private readonly overlay: HTMLCanvasElement;
@@ -189,6 +191,7 @@ export class FaceView {
     this.smoother.reset();
     this.lastLandmarks = null;
     this.renderer.canvas.style.visibility = 'hidden';
+    this.light.reset();
     this.overlayCtx.clearRect(0, 0, this.overlay.width, this.overlay.height);
   }
 
@@ -307,6 +310,7 @@ export class FaceView {
     if (result) {
       this.lastLandmarks = this.smoother.smooth(result.landmarks, now / 1000);
       this.lastBlendshapes = result.blendshapes;
+      this.light.update(video, this.lastLandmarks, w, h, result.blendshapes, now);
     }
     const opacity = this.presence.update(tracked, now);
     if (!tracked && opacity === 0) {
@@ -330,6 +334,7 @@ export class FaceView {
       time: (now - this.t0) / 1000,
       faceWidth: metrics?.width ?? 0,
       faceTransform: metrics?.transform ?? null,
+      illuminant: this.light.gain,
     });
 
     if (this.hud) {
@@ -362,6 +367,9 @@ export class FaceView {
         tracked,
         opacity,
         blendshapes: this.lastBlendshapes,
+        light: this.light.valid
+          ? `light ${this.light.gain.map((g) => g.toFixed(2)).join(' ')}`
+          : 'light (measuring)',
       });
     }
   }

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.0.7] — 2026-11-07 — Lipstick lit by the room's light (no more glow)
+
+Testing showed lipstick "glowing" in a dim room, like a screen/overlay layer: the shade was
+applied at its daylight brightness while the face was dim.
+
+- **Scene light from the whites of the eyes** (`tracking/light.ts`): every few frames the
+  sclera is sampled, the brightest region averaged, and compared with the measured reference
+  sclera colour from Choi et al. 2017 (sRGB 0.70/0.59/0.54). This gives per-channel scene light
+  (exposure + colour) that doesn't depend on skin tone. Smoothed, skipped while blinking,
+  white-balance swings limited.
+- The product colour is multiplied by that light (linear RGB) before the pigment transfer, so
+  lipstick darkens and warms with the room exactly like real makeup. Lip-based brightness
+  adaptation is removed (lip lightness varies too much between people).
+- Debug HUD shows the measured light.
+- Measured on a synthetic dim warm room: light estimate within 0.007 of the truth; lip colour
+  ΔE 21 → 1.0 vs a physically lit real lipstick.
+
 ## [0.0.6] — 2026-11-07 — Research-based lipstick rendering, product recipes
 
 Researched how commercial try-on renders makeup (Shiseido and L'Oréal patents, Amazon's

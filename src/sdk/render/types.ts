@@ -105,6 +105,12 @@ export interface FrameInfo {
    * origin between the eyes, rotated with the head). Used to anchor sparkle to the face.
    */
   faceTransform: Float32Array | null;
+  /**
+   * Scene light as per-channel linear gains relative to daylight (from the sclera, see
+   * tracking/light.ts). Product colours are multiplied by it so they are lit like the face.
+   * Omitted = [1, 1, 1].
+   */
+  illuminant?: RGB;
 }
 
 export type RendererKind = 'webgl2' | 'canvas2d';
