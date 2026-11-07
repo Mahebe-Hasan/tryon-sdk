@@ -41,6 +41,8 @@ export interface EffectSpec {
   opacity: number;
   /** Soft-edge radius as a fraction of face width (e.g. 0.01). */
   feather: number;
+  /** 0 = soft edge centred on the outline, 1 = soft edge fully inside (no bleed). */
+  featherInset?: number;
 }
 
 export interface FaceViewEvents extends Record<string, unknown> {
@@ -361,6 +363,7 @@ export class FaceView {
       finish: fx.finish,
       opacity: fx.opacity * presence,
       featherPx: fx.feather * faceWidth,
+      featherInset: fx.featherInset ?? 0,
     }));
   }
 }

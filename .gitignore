@@ -13,3 +13,6 @@ Thumbs.db
 # Copied from node_modules by scripts/copy-mediapipe.mjs
 public/wasm/*
 !public/wasm/.gitkeep
+
+# Local-only review material (never commit user recordings)
+.review/

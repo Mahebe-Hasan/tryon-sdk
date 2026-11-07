@@ -96,6 +96,47 @@ export function centroid(pts: readonly Vec2[]): Vec2 {
 }
 
 /**
+ * Smooth a closed loop with a centripetal Catmull-Rom spline through its points, adding
+ * `subdivisions` points per segment. Turns MediaPipe's 20-point lip outline into a natural
+ * curve instead of visible straight segments. Centripetal parameterisation avoids loops
+ * and overshoot at sharp corners (mouth corners) and on very short segments.
+ */
+export function smoothClosed(pts: readonly Vec2[], subdivisions: number): Vec2[] {
+  const n = pts.length;
+  if (n < 3 || subdivisions < 1) return [...pts];
+  const out: Vec2[] = [];
+  const at = (i: number): Vec2 => pts[((i % n) + n) % n] as Vec2;
+  const knot = (a: Vec2, b: Vec2): number => Math.max(1e-6, Math.sqrt(dist(a, b)));
+  for (let i = 0; i < n; i++) {
+    const p0 = at(i - 1);
+    const p1 = at(i);
+    const p2 = at(i + 1);
+    const p3 = at(i + 2);
+    const t1 = knot(p0, p1);
+    const t2 = t1 + knot(p1, p2);
+    const t3 = t2 + knot(p2, p3);
+    out.push(p1);
+    for (let s = 1; s <= subdivisions; s++) {
+      const t = t1 + ((t2 - t1) * s) / (subdivisions + 1);
+      const a1 = lerpT(p0, p1, 0, t1, t);
+      const a2 = lerpT(p1, p2, t1, t2, t);
+      const a3 = lerpT(p2, p3, t2, t3, t);
+      const b1 = lerpT(a1, a2, 0, t2, t);
+      const b2 = lerpT(a2, a3, t1, t3, t);
+      out.push(lerpT(b1, b2, t1, t2, t));
+    }
+  }
+  return out;
+}
+
+function lerpT(a: Vec2, b: Vec2, ta: number, tb: number, t: number): Vec2 {
+  const d = tb - ta;
+  if (Math.abs(d) < 1e-9) return { x: a.x, y: a.y };
+  const u = (t - ta) / d;
+  return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u };
+}
+
+/**
  * Join two roughly parallel open chains (e.g. upper and lower brow edge) into one polygon,
  * choosing the orientation that does not self-intersect.
  */

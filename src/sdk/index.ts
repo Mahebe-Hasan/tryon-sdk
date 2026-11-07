@@ -5,7 +5,7 @@
  * blocks below are exported for the demo and for testing.
  */
 
-export const VERSION = '0.0.4';
+export const VERSION = '0.0.5';
 
 export const PRIVACY_STATEMENT =
   'Your camera stays on your device. The try-on runs entirely in your browser — no images or video are uploaded, stored, or shared.';

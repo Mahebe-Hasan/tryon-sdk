@@ -6,6 +6,7 @@ import {
   joinChains,
   lerp,
   polygonArea,
+  smoothClosed,
   type Connection,
   type Vec2,
 } from './paths';
@@ -85,6 +86,8 @@ export const REGION_CONFIG = {
   browBoneT: 0.3,
   /** Cupid's-bow highlight: move the lip points this far toward the philtrum. */
   cupidsBowT: 0.35,
+  /** Extra curve points per lip-outline segment (0 = MediaPipe's straight segments). */
+  lipCurveSubdivisions: 3,
 };
 
 // ---- Index sets from MediaPipe constants -------------------------------------------------
@@ -193,7 +196,7 @@ export function computeRegions(
   const faceW = dist(P(IDX.faceSideR), P(IDX.faceSideL));
   const up = normalize(sub(P(IDX.faceTop), P(IDX.chin)));
 
-  const lipLoops = LIP_LOOPS.map(pts).sort(
+  const lipLoops = LIP_LOOPS.map((l) => smoothClosed(pts(l), cfg.lipCurveSubdivisions)).sort(
     (a, b) => Math.abs(polygonArea(b)) - Math.abs(polygonArea(a)),
   );
   const lipOuter = lipLoops[0] ?? [];

@@ -10,6 +10,8 @@ const COMPOSITE: Record<BlendMode, GlobalCompositeOperation> = {
   overlay: 'overlay',
   'soft-light': 'soft-light',
   color: 'color',
+  // Closest 2D equivalent: product hue/saturation with the region's own light and shadow.
+  tint: 'color',
 };
 
 /**

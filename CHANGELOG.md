@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.0.5] — 2026-11-07 — Phase 2 fix: lip colour looks on the lips, not over them
+
+Found by reviewing an iPhone recording (29 fps, tracking was aligned): the colour looked like
+a flat red sticker — uniform colour, lost lip shading/lines, hard jagged edges, and bleed past
+the lip line.
+
+- **New `tint` blend mode** (makeup mode): product colour × (pixel brightness ÷ region mean
+  brightness). The region shows the exact shade on average but keeps every bit of its own
+  light, shadow, lip lines and highlights. Lip test now uses it.
+- **Region brightness measured under the mask**: a stats pass writes (lum·mask, mask) and is
+  mipmapped, giving the mask-weighted mean. Before, brightness was sampled at the region's
+  bounding-box centre — the dark inside of an open mouth.
+- **Inward-only soft edges** (`featherInset`, 0–1): lips fade inside their outline, so
+  nothing bleeds onto skin or teeth. Every mask is now anti-aliased (`minFeatherTexels`).
+- **Curved lip outlines**: MediaPipe's 20-point lip loops are smoothed with a centripetal
+  Catmull-Rom spline (`REGION_CONFIG.lipCurveSubdivisions`), removing visible straight
+  segments.
+- Demo: "Edge inset" slider; Canvas 2D fallback maps `tint` to `color`.
+
 ## [0.0.4] — 2026-11-07 — Phase 2 fix: makeup sticks to moving lips
 
 - **Same-frame rendering:** the renderer now snapshots the camera frame (`captureFrame`)

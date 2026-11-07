@@ -128,3 +128,20 @@ describe('GLSL blend library stays in sync', () => {
     });
   });
 });
+
+describe('tint (makeup mode)', () => {
+  it('shows the exact shade where the pixel matches the region mean', () => {
+    close(blend('tint', [0.3, 0.3, 0.3], [0.6, 0.1, 0.2], 1), [0.6, 0.1, 0.2]);
+  });
+
+  it('keeps the region shading: darker pixels darker, lighter pixels lighter', () => {
+    const s: RGB = [0.6, 0.1, 0.2];
+    close(blend('tint', [0, 0, 0], s, 0.5), [0.3, 0.05, 0.1]);
+    close(blend('tint', [0, 0, 0], s, 1.5), [0.9, 0.15, 0.3]);
+  });
+
+  it('clamps to 0–1', () => {
+    close(blend('tint', [0, 0, 0], [0.8, 0.5, 0.1], 3), [1, 1, 0.3]);
+    close(blend('tint', [0, 0, 0], [0.8, 0.5, 0.1], -1), [0, 0, 0]);
+  });
+});

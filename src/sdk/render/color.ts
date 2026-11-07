@@ -13,6 +13,12 @@ export const BLEND_MODES = [
   'overlay',
   'soft-light',
   'color',
+  /**
+   * Makeup mode (not W3C): the product colour, modulated by each pixel's brightness relative
+   * to the region's average. The region shows the exact shade on average while keeping all of
+   * its own light, shadow and texture — so the colour looks like it is ON the lips, not over.
+   */
+  'tint',
 ] as const;
 export type BlendMode = (typeof BLEND_MODES)[number];
 
@@ -96,8 +102,19 @@ export function colorBlend(b: RGB, s: RGB): RGB {
   return setLum(s, lumW(b));
 }
 
-export function blend(mode: BlendMode, b: RGB, s: RGB): RGB {
+/**
+ * Tint: `s × shadeRatio`, where shadeRatio = pixel luminance / mean luminance of the region
+ * (computed on the GPU from the mask). Clamped to 0–1.
+ */
+export function tint(s: RGB, shadeRatio: number): RGB {
+  const r = Math.max(0, shadeRatio);
+  return [Math.min(1, s[0] * r), Math.min(1, s[1] * r), Math.min(1, s[2] * r)];
+}
+
+export function blend(mode: BlendMode, b: RGB, s: RGB, shadeRatio = 1): RGB {
   switch (mode) {
+    case 'tint':
+      return tint(s, shadeRatio);
     case 'multiply':
       return multiply(b, s);
     case 'screen':

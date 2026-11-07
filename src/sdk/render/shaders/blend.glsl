@@ -32,11 +32,15 @@ vec3 clipColor(vec3 c) {
 
 vec3 bColor(vec3 b, vec3 s) { return clipColor(s + (lumW(b) - lumW(s))); }
 
-vec3 blendMode(vec3 b, vec3 s, int mode) {
+// Makeup tint: product colour x (pixel luminance / region mean luminance).
+vec3 bTint(vec3 s, float shadeRatio) { return clamp(s * max(shadeRatio, 0.0), 0.0, 1.0); }
+
+vec3 blendMode(vec3 b, vec3 s, int mode, float shadeRatio) {
   if (mode == 1) return bMultiply(b, s);
   if (mode == 2) return bScreen(b, s);
   if (mode == 3) return bOverlay(b, s);
   if (mode == 4) return bSoftLight(b, s);
   if (mode == 5) return bColor(b, s);
+  if (mode == 6) return bTint(s, shadeRatio);
   return s;
 }

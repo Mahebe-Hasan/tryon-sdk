@@ -7,16 +7,22 @@ out vec4 o;
 uniform sampler2D u_base;   // composite so far
 uniform sampler2D u_video;  // original camera frame, mipmapped
 uniform sampler2D u_mask;   // feathered coverage (r)
+uniform sampler2D u_stats;  // mipmapped (r = lum * mask, g = mask) for the region mean
 
 uniform vec3 u_color;       // sRGB 0-1
 uniform int u_mode;         // BLEND_MODES index
 uniform float u_opacity;
+// 0 = soft edge centred on the outline; 1 = soft edge entirely inside (no bleed outside).
+uniform float u_featherInset;
 
-// Lighting adaptation: region brightness sampled from a coarse mip at the region centre.
-uniform float u_lightAdapt;
-uniform float u_refLum;
+// Region mean luminance = (sum lum*mask) / (sum mask), read from a coarse mip of u_stats.
 uniform vec2 u_regionCenter;
 uniform float u_regionLod;
+// Lighting adaptation strength and reference luminance.
+uniform float u_lightAdapt;
+uniform float u_refLum;
+// Tint: exponent on (pixel / region mean) luminance. 1 = natural shading, >1 = more contrast.
+uniform float u_tintContrast;
 
 // Texture detail: high-pass of the original frame (pixel - local average at u_detailLod).
 uniform float u_detailLod;
@@ -42,7 +48,10 @@ float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 
 void main() {
   vec3 base = texture(u_base, v_uv).rgb;
-  float m = texture(u_mask, v_uv).r * u_opacity;
+  float mRaw = texture(u_mask, v_uv).r;
+  // The blurred outline sits at 0.5; remap so the soft edge moves inside the shape.
+  float lo = 0.5 * u_featherInset;
+  float m = clamp((mRaw - lo) / (1.0 - lo), 0.0, 1.0) * u_opacity;
   if (m <= 0.002) {
     o = vec4(base, 1.0);
     return;
@@ -51,11 +60,14 @@ void main() {
   vec3 orig = texture(u_video, v_uv).rgb;
   float origL = lum(orig);
 
-  float regionL = lum(textureLod(u_video, u_regionCenter, u_regionLod).rgb);
-  float adapt = mix(1.0, clamp(regionL / u_refLum, 0.45, 1.5), u_lightAdapt);
+  vec2 st = textureLod(u_stats, u_regionCenter, u_regionLod).rg;
+  float meanL = st.g > 0.004 ? st.r / st.g : origL;
+  meanL = max(meanL, 0.02);
+  float adapt = mix(1.0, clamp(meanL / u_refLum, 0.45, 1.5), u_lightAdapt);
   vec3 c = clamp(u_color * adapt, 0.0, 1.0);
 
-  vec3 res = blendMode(base, c, u_mode);
+  float shadeRatio = pow(clamp(origL / meanL, 0.0, 3.0), u_tintContrast);
+  vec3 res = blendMode(base, c, u_mode, shadeRatio);
 
   float hp = origL - lum(textureLod(u_video, v_uv, u_detailLod).rgb);
   float hpPos = max(hp, 0.0);

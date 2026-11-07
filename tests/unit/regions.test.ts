@@ -4,6 +4,7 @@ import {
   connectionsToPaths,
   joinChains,
   polygonArea,
+  smoothClosed,
   type Connection,
 } from '../../src/sdk/tracking/paths';
 import { allRegionIndices, computeRegions } from '../../src/sdk/tracking/regions';
@@ -138,5 +139,33 @@ describe('computeRegions', () => {
     expect(Math.abs(polygonArea(outer ?? []))).toBeGreaterThanOrEqual(
       Math.abs(polygonArea(inner ?? [])),
     );
+  });
+});
+
+describe('smoothClosed (lip outline curve)', () => {
+  const sq = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 10 },
+    { x: 0, y: 10 },
+  ];
+
+  it('passes through the original points and adds subdivisions', () => {
+    const out = smoothClosed(sq, 3);
+    expect(out).toHaveLength(16);
+    sq.forEach((p, i) => expect(out[i * 4]).toEqual(p));
+  });
+
+  it('bulges segments outward into a curve without wild overshoot', () => {
+    const out = smoothClosed(sq, 3);
+    const mid = out[2] as { x: number; y: number }; // middle of the top edge
+    expect(mid.x).toBeCloseTo(5, 5);
+    expect(mid.y).toBeLessThan(0);
+    expect(mid.y).toBeGreaterThan(-3);
+  });
+
+  it('returns the input for tiny loops or 0 subdivisions', () => {
+    expect(smoothClosed(sq.slice(0, 2), 3)).toHaveLength(2);
+    expect(smoothClosed(sq, 0)).toEqual(sq);
   });
 });

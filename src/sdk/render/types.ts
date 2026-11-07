@@ -41,6 +41,7 @@ export const RENDER_CONFIG = {
     overlay: 0.3,
     'soft-light': 0.3,
     color: 0,
+    tint: 0.5,
   } satisfies Record<BlendMode, number>,
   /** How much skin/lip texture (local contrast) to put back on top, per blend mode. */
   detailByMode: {
@@ -50,7 +51,12 @@ export const RENDER_CONFIG = {
     overlay: 0,
     'soft-light': 0,
     color: 0,
+    tint: 0, // tint already carries every pixel's own light and shadow
   } satisfies Record<BlendMode, number>,
+  /** Tint: exponent on (pixel ÷ region mean) brightness. 1 = natural; higher = deeper shading. */
+  tintContrast: 1.15,
+  /** Minimum mask blur (in mask texels) so every edge is anti-aliased. */
+  minFeatherTexels: 0.8,
   /** Sparkle cells per face width. */
   sparkleDensity: 120,
 };
@@ -66,6 +72,11 @@ export interface RenderEffect {
   opacity: number;
   /** Soft-edge radius in frame pixels. */
   featherPx: number;
+  /**
+   * Where the soft edge sits: 0 = centred on the outline (blush, contour), 1 = entirely
+   * inside it, so nothing bleeds past the outline (lips). Default 0.
+   */
+  featherInset?: number;
 }
 
 export interface FrameInfo {

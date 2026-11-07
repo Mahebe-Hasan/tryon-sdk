@@ -21,6 +21,8 @@ interface Preset {
   opacity: number;
   /** × face width */
   feather: number;
+  /** 0 = soft edge centred on the outline, 1 = fully inside (no bleed). */
+  featherInset: number;
 }
 
 const PRESETS: Record<string, Preset> = {
@@ -28,10 +30,12 @@ const PRESETS: Record<string, Preset> = {
     label: 'Lips',
     regions: ['lips'],
     color: '#9b1b30',
-    blend: 'normal',
+    // Tint keeps the lips' own shading and texture, so the colour reads as on the lips.
+    blend: 'tint',
     finish: 'satin',
-    opacity: 0.75,
-    feather: 0.006,
+    opacity: 0.9,
+    feather: 0.012,
+    featherInset: 1,
   },
   cheeks: {
     label: 'Cheeks',
@@ -41,6 +45,7 @@ const PRESETS: Record<string, Preset> = {
     finish: 'satin',
     opacity: 0.35,
     feather: 0.08,
+    featherInset: 0,
   },
   eyelids: {
     label: 'Eyelids',
@@ -50,6 +55,7 @@ const PRESETS: Record<string, Preset> = {
     finish: 'shimmer',
     opacity: 0.55,
     feather: 0.02,
+    featherInset: 0,
   },
   liner: {
     label: 'Lash line + wing',
@@ -59,6 +65,7 @@ const PRESETS: Record<string, Preset> = {
     finish: 'matte',
     opacity: 0.85,
     feather: 0.004,
+    featherInset: 0,
   },
   brows: {
     label: 'Brows',
@@ -68,6 +75,7 @@ const PRESETS: Record<string, Preset> = {
     finish: 'matte',
     opacity: 0.45,
     feather: 0.01,
+    featherInset: 0,
   },
   iris: {
     label: 'Iris',
@@ -77,6 +85,7 @@ const PRESETS: Record<string, Preset> = {
     finish: 'satin',
     opacity: 0.7,
     feather: 0.004,
+    featherInset: 0,
   },
   skin: {
     label: 'Face skin',
@@ -86,6 +95,7 @@ const PRESETS: Record<string, Preset> = {
     finish: 'satin',
     opacity: 0.35,
     feather: 0.04,
+    featherInset: 0,
   },
   underEye: {
     label: 'Under-eye',
@@ -95,6 +105,7 @@ const PRESETS: Record<string, Preset> = {
     finish: 'satin',
     opacity: 0.4,
     feather: 0.02,
+    featherInset: 0,
   },
   contour: {
     label: 'Contour',
@@ -111,6 +122,7 @@ const PRESETS: Record<string, Preset> = {
     finish: 'matte',
     opacity: 0.35,
     feather: 0.04,
+    featherInset: 0,
   },
   highlight: {
     label: 'Highlight',
@@ -127,6 +139,7 @@ const PRESETS: Record<string, Preset> = {
     finish: 'shimmer',
     opacity: 0.45,
     feather: 0.03,
+    featherInset: 0,
   },
 };
 
@@ -183,6 +196,7 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
   const finishSel = select(FINISHES);
   const opacity = range(0, 1, 0.01);
   const feather = range(0, 0.1, 0.001);
+  const inset = range(0, 1, 0.05);
 
   field('Region', regionSel);
   field('Colour', color);
@@ -190,6 +204,7 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
   field('Finish', finishSel);
   field('Opacity', opacity);
   field('Feather', feather);
+  field('Edge inset', inset);
 
   const sync = (): void => {
     regionSel.value = enabled ? state.key : 'off';
@@ -198,7 +213,8 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
     finishSel.value = state.finish;
     opacity.value = String(state.opacity);
     feather.value = String(state.feather);
-    for (const c of [color, blendSel, finishSel, opacity, feather]) c.disabled = !enabled;
+    inset.value = String(state.featherInset);
+    for (const c of [color, blendSel, finishSel, opacity, feather, inset]) c.disabled = !enabled;
   };
   const apply = (): void => {
     view.setEffects(
@@ -212,6 +228,7 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
               finish: state.finish,
               opacity: state.opacity,
               feather: state.feather,
+              featherInset: state.featherInset,
             },
           ]
         : [],
@@ -239,6 +256,10 @@ export function mountTestEffect(host: HTMLElement, view: FaceView, initial: stri
   });
   opacity.addEventListener('input', () => {
     state.opacity = Number(opacity.value);
+    apply();
+  });
+  inset.addEventListener('input', () => {
+    state.featherInset = Number(inset.value);
     apply();
   });
   feather.addEventListener('input', () => {
