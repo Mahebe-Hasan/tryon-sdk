@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.2] — 2026-11-09 — Fuller, brand-calibrated blush
+
+- Blush is now a clearly visible flush over the upper cheek that fades out over a wide area,
+  matching a brand's own blush photos (liquid / powder / cream on one face, measured against
+  the bare jaw skin): powder ≈ +13 a*, cream ≈ +14 a*, liquid ≈ +23 a* at the densest point.
+  Measured on a real face photo after the change: matte +12, satin +13, dewy ≈ +22 a*.
+- New blush finish **dewy** (liquid blush): more saturated, with a dewy sheen. Pigment density
+  per finish (`densityByFinish`).
+- Bigger blush shapes (lifted 0.065 → 0.14 face widths, apples, draped, sun-kissed, vertical),
+  softer feather (0.11), and the eyes are cut out so blush never tints them.
+
 ## [0.1.1] — 2026-11-09 — Low-light warning
 
 - New `FaceView` event `'lighting'` (`{ low, level }`): fires when the face (or the whole frame

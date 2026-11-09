@@ -173,7 +173,7 @@ export function productEffects(p: Product, faceShape: FaceShape = 'oval'): Effec
       opacity: 1,
       feather: r.feather,
       featherInset: r.featherInset,
-      layer: layerParams(r.density, r.glow, ff, intensity),
+      layer: layerParams(r.densityByFinish?.[ff] ?? r.density, r.glow, ff, intensity),
       ...(r.erase && { erase: r.erase }),
     },
   ];

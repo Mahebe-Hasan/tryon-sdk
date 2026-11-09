@@ -92,6 +92,8 @@ export type FaceRecipe =
       technique: 'layer';
       regions: RegionId[];
       density: number;
+      /** Pigment density per finish (e.g. liquid/dewy blush is more saturated than powder). */
+      densityByFinish?: Partial<Record<FaceFinish, number>>;
       glow: number;
       feather: number;
       featherInset: number;
@@ -145,18 +147,25 @@ export const FACE_RECIPES: Record<Exclude<FaceCategory, 'eyeshadow'>, FaceRecipe
     defaultFinish: 'natural',
     finishes: SKIN_FINISHES,
   },
-  // Sheer wash on the cheek apples with a wide soft falloff — the "natural flush".
+  // A soft, clearly visible flush over the upper cheek, fading out over a wide area.
+  // Calibrated on a brand's own blush photos (liquid / powder / cream on the same face,
+  // measured against the bare jaw skin): powder ≈ +13 a*, −6 L*; cream ≈ +14 a*, −4 L*;
+  // liquid (dewy) ≈ +23 a*, −8 L* at the densest point. The colour spreads over roughly the
+  // upper half of the cheek, apple to ear, with no visible edge.
   blush: {
     technique: 'layer',
     // Default placement; the product's `style` picks another (BLUSH_STYLES).
     regions: ['blushLifted.R', 'blushLifted.L'],
-    // Natural flush: about +10 a* at the densest point, fading smoothly to 0.
-    density: 0.3,
+    // The feathered stroke peaks at ~0.8 coverage, so these give an effective density of
+    // ~0.52 (powder), ~0.56 (cream/satin) and ~0.96 (liquid) — the measured shifts for a pink.
+    density: 0.7,
+    densityByFinish: { matte: 0.65, satin: 0.7, shimmer: 0.65, dewy: 1.2 },
     glow: 0,
-    feather: 0.085,
+    feather: 0.11,
     featherInset: 0,
+    erase: ['eye.R', 'eye.L'],
     defaultFinish: 'satin',
-    finishes: ['matte', 'satin', 'shimmer'],
+    finishes: ['matte', 'satin', 'dewy', 'shimmer'],
   },
   bronzer: {
     technique: 'layer',

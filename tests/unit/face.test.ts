@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { layerFactor, srgbToLinear, type RGB } from '../../src/sdk/render/color';
+import {
+  hexToRgb,
+  layerFactor,
+  linearToSrgb,
+  rgbToLab,
+  srgbToLinear,
+  type Lab,
+  type RGB,
+} from '../../src/sdk/render/color';
+import { REGION_CONFIG } from '../../src/sdk/tracking/regions';
 import {
   FACE_FINISH_PARAMS,
   FACE_RECIPES,
@@ -72,8 +81,9 @@ describe('face recipes', () => {
     const h = FACE_RECIPES.highlighter;
     expect(b.technique).toBe('layer');
     if (b.technique === 'layer') {
-      expect(b.density).toBeLessThan(0.6);
       expect(b.feather).toBeGreaterThanOrEqual(0.08);
+      // Liquid (dewy) blush is more saturated than powder (matte).
+      expect(b.densityByFinish?.dewy).toBeGreaterThan(b.densityByFinish?.matte ?? 1);
     }
     if (h.technique === 'layer') {
       expect(h.density).toBe(0);
@@ -207,3 +217,49 @@ describe('realism fixes', () => {
     }
   });
 });
+
+describe('blush strength (calibrated on brand photos of the same face)', () => {
+  // Bare cheek ≈ L 80, a* 14; a pastel pink blush like the reference shade.
+  const skin: RGB = [233 / 255, 188 / 255, 170 / 255];
+  const pink = hexToRgb('#F59AA5');
+  /** Peak coverage of a stroke of width w blurred with sigma = feather / 2 (both × face width). */
+  const peak = (w: number, feather: number): number => erf(w / 2 / ((feather / 2) * Math.SQRT2));
+  const shift = (density: number, cover: number): Lab => {
+    const sl = lin(skin);
+    const f = layerFactor(lin(pink), sl, density);
+    const full = sl.map((v, i) => linearToSrgb(v * (f[i] as number))) as RGB;
+    const out = skin.map((v, i) => v + ((full[i] as number) - v) * cover) as RGB;
+    const a = rgbToLab(out);
+    const b = rgbToLab(skin);
+    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  };
+  const b = FACE_RECIPES.blush;
+  const cover = peak(REGION_CONFIG.blush.liftedWidth, b.feather);
+  const d = (f: 'matte' | 'satin' | 'dewy'): number =>
+    b.technique === 'layer' ? (b.densityByFinish?.[f] ?? b.density) : 0;
+
+  it('powder (matte) ≈ +13 a*, a few L* darker', () => {
+    const [dL, da] = shift(d('matte'), cover);
+    expect(da).toBeGreaterThan(10);
+    expect(da).toBeLessThan(17);
+    expect(dL).toBeLessThan(-2);
+    expect(dL).toBeGreaterThan(-9);
+  });
+
+  it('liquid (dewy) ≈ +23 a*', () => {
+    const [, da] = shift(d('dewy'), cover);
+    expect(da).toBeGreaterThan(18);
+    expect(da).toBeLessThan(27);
+  });
+});
+
+/** Abramowitz–Stegun erf (max error 1.5e-7). */
+function erf(x: number): number {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const y =
+    1 -
+    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+      t *
+      Math.exp(-x * x);
+  return Math.sign(x) * y;
+}

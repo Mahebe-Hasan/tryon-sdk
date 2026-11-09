@@ -123,11 +123,11 @@ export const REGION_CONFIG = {
   lipCurveSubdivisions: 3,
   /** Blush shapes (× face width). Strokes are blurred heavily by the recipe → soft gradients. */
   blush: {
-    applesRx: 0.075,
-    applesRy: 0.055,
-    liftedWidth: 0.065,
-    drapedWidth: 0.05,
-    sunkissedWidth: 0.035,
+    applesRx: 0.1,
+    applesRy: 0.075,
+    liftedWidth: 0.14,
+    drapedWidth: 0.08,
+    sunkissedWidth: 0.05,
     /** Pull the temple point toward the outer eye corner (keeps blush off the hairline). */
     templeInset: 0.2,
   },
@@ -409,10 +409,10 @@ export function computeRegions(
         group: 'cheeks',
         shape: {
           kind: 'polyline',
-          points: [ap, lerp(ap, temple, 0.5), lerp(ap, temple, 0.88)],
+          // Starts just inside the apple, densest on the upper cheek, blends out toward the ear.
+          points: [lerp(ap, temple, -0.12), lerp(ap, temple, 0.3), lerp(ap, temple, 0.85)],
           width: faceW * bl.liftedWidth,
-          // Densest/widest on the cheekbone, thinning as it blends toward the temple.
-          widths: [1, 0.85, 0.45].map((k) => k * faceW * bl.liftedWidth),
+          widths: [0.8, 1, 0.55].map((k) => k * faceW * bl.liftedWidth),
         },
       },
       {
@@ -436,8 +436,8 @@ export function computeRegions(
             add(lerp(ap, P(side === 'R' ? 234 : 454), 0.42), scale(up, faceW * 0.05)),
             sub(lerp(ap, P(side === 'R' ? 234 : 454), 0.45), scale(up, faceW * 0.09)),
           ],
-          width: faceW * 0.055,
-          widths: taper([1, 0.55], 0.055),
+          width: faceW * 0.08,
+          widths: taper([1, 0.55], 0.08),
         },
       },
       {
