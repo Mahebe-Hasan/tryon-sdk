@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1] — 2026-11-09 — Low-light warning
+
+- New `FaceView` event `'lighting'` (`{ low, level }`): fires when the face (or the whole frame
+  when no face is found) stays too dark for 1.5 s, and again once it is bright enough for
+  0.8 s. Measured as mean luma on a 32 px copy every 10 frames (`tracking/lowLight.ts`,
+  `LOW_LIGHT_CONFIG`; hysteresis 0.20 / 0.27). Host pages use it to ask the shopper to move
+  somewhere brighter.
+
 ## [0.1.0] — 2026-11-08 — First embeddable release (Lushé integration)
 
 - Version 0.1.0 for self-hosting on a shop: `dist/tryon.esm.js` + `dist/models/` + `dist/wasm/`

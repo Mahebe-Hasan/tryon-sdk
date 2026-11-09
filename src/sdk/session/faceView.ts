@@ -13,6 +13,7 @@ import { FaceTracker } from '../tracking/face';
 import { faceMetrics, lipGlossSpot } from '../tracking/metrics';
 import { Presence } from '../tracking/presence';
 import { SceneLight } from '../tracking/light';
+import { LowLightMonitor } from '../tracking/lowLight';
 import { FaceShapeTracker, type FaceShape } from '../tracking/faceShape';
 import { CompareSlider } from './compare';
 import { computeRegions, type Region, type RegionId } from '../tracking/regions';
@@ -67,6 +68,8 @@ export interface FaceViewEvents extends Record<string, unknown> {
   'tracking-found': undefined;
   /** Face shape decided/changed (detected) or overridden; placements follow `active`. */
   'face-shape': { detected: FaceShape | null; active: FaceShape; overridden: boolean };
+  /** The scene got too dark (`low: true`) or bright enough again; `level` = mean luma 0–1. */
+  lighting: { low: boolean; level: number };
   error: unknown;
 }
 
@@ -87,6 +90,7 @@ export class FaceView {
   private readonly smoother: LandmarkSmoother;
   private readonly presence: Presence;
   private readonly light = new SceneLight();
+  private readonly lowLight = new LowLightMonitor();
   private readonly shapeTracker = new FaceShapeTracker();
   private shapeOverride: FaceShape | null = null;
   private products: Product[] | null = null;
@@ -257,6 +261,9 @@ export class FaceView {
     this.lastLandmarks = null;
     this.renderer.canvas.style.visibility = 'hidden';
     this.light.reset();
+    if (this.lowLight.isLow)
+      this.events.emit('lighting', { low: false, level: this.lowLight.level });
+    this.lowLight.reset();
     this.overlayCtx.clearRect(0, 0, this.overlay.width, this.overlay.height);
   }
 
@@ -382,6 +389,9 @@ export class FaceView {
       this.smoother.reset();
       this.lastLandmarks = null;
     }
+    const lowLight = this.lowLight.update(video, w, h, result ? this.lastLandmarks : null, now);
+    if (lowLight !== null)
+      this.events.emit('lighting', { low: lowLight, level: this.lowLight.level });
     if (tracked !== this.wasTracked) {
       this.wasTracked = tracked;
       this.events.emit(tracked ? 'tracking-found' : 'tracking-lost', undefined);
